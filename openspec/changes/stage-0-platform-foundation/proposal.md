@@ -15,7 +15,7 @@
 - Добавляются служебные маршруты `/healthz` и `/readyz`; `readyz` проверяет БД и состояние миграций.
 - Настраивается `log/slog` в JSON, уровень из конфига, корреляция по `request_id`.
 - Добавляется генератор UUID v7 в `internal/shared/ids` с тестами.
-- Настраивается `docker/docker-compose.yml`: PostgreSQL 16, MailHog, MinIO, сервис миграций и приложение; тома для данных.
+- Настраивается `docker/docker-compose.yml` только для инфраструктуры: PostgreSQL 16, MailHog, MinIO; приложение и миграции запускаются локальными бинарниками, а в production — как сервис; тома для данных.
 - Добавляются `Makefile` (`up`, `down`, `migrate-up`, `migrate-down`, `test`, `lint`, `build`) и CI (lint → templ generate check → unit tests → build), а также проверка применения и отката миграций.
 - Добавляются unit-тесты конфигурации и helper транзакций/health-проверок.
 
@@ -34,7 +34,7 @@
 ## Impact
 
 - Новый Go-модуль и структура каталогов; новые зависимости: `gin`, `pgx v5`, `golang-migrate`, `cleanenv`, `godotenv`, `uuid` (или собственная генерация v7), линтер.
-- Новые инфраструктурные файлы: `docker/docker-compose.yml`, `docker/Dockerfile`, `Makefile`, `.env.example`, конфигурация CI.
+- Новые инфраструктурные файлы: `docker/docker-compose.yml`, `Makefile`, `.env.example`, конфигурация CI.
 - Первая миграция создаёт схемы модулей (без бизнес-таблиц) и таблицу учёта миграций `golang-migrate`.
 - Публичный контракт на этом этапе ограничен `/healthz`, `/readyz` и (при наличии) `/metrics`; остальные маршруты появятся на следующих этапах.
 - Этап не затрагивает существующие спецификации (их нет) и не меняет `docs/technical-specification.md`.

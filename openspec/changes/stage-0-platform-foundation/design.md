@@ -54,8 +54,7 @@ internal/
     ids/
 migrations/
 docker/
-  docker-compose.yml
-  Dockerfile
+  docker-compose.yml        — только инфраструктура
 web/static/               — пока пусто, появится с UI
 .env.example
 Makefile
@@ -130,10 +129,8 @@ func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) erro
 | `mailhog` | `mailhog/mailhog` | порты SMTP и web UI |
 | `minio` | `minio/minio` | том `miniodata`, healthcheck |
 | `minio-init` | `minio/mc` | создаёт бакет `S3_BUCKET`, затем завершается |
-| `migrate` | собственный образ | запускает `cmd/migrate up`, зависит от healthcheck postgres |
-| `app` | собственный образ | зависит от `migrate` (completed) и `postgres` (healthy) |
 
-- `Dockerfile`: multi-stage (`golang` → `distroless`/`alpine`), бинарник `server` и `migrate` в одном образе, non-root пользователь.
+- Go-приложение в Docker не упаковывается: локально `cmd/server` и `cmd/migrate` запускаются как обычные бинарники (или через `go run`), в production — как сервис (systemd/оркестратор). Compose поднимает только инфраструктуру, от которой зависит приложение.
 - Все параметры через `.env`; никаких секретов в compose.
 
 ### 9. Makefile и CI
