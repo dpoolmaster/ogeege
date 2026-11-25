@@ -1,0 +1,19 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - forbidigo
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: '^os\.Getenv$'
+          msg: "читайте переменные окружения только через internal/shared/config"
+  exclusions:
+    rules:
+      - path: internal/shared/config/
+        linters:
+          - forbidigo

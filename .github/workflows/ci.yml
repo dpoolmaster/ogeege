@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: oge_ege
+          POSTGRES_PASSWORD: oge_ege
+          POSTGRES_DB: oge_ege
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U oge_ege -d oge_ege"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://oge_ege:oge_ege@localhost:5432/oge_ege?sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Линтер
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.15.0
+
+      - name: Установить templ
+        run: go install github.com/a-h/templ/cmd/templ@latest
+
+      - name: Проверить генерацию разметки
+        run: |
+          make templ
+          git diff --exit-code
+
+      - name: Unit-тесты
+        run: go test ./...
+
+      - name: Применить и откатить миграции
+        run: |
+          go run ./cmd/migrate up
+          go run ./cmd/migrate down 1
+          go run ./cmd/migrate up
+
+      - name: Сборка
+        run: go build ./...
