@@ -442,6 +442,7 @@ type TopicFilter struct {
 	Limit    int
 	ExamID   *uuid.UUID
 	ParentID *uuid.UUID
+	Code     string
 }
 
 // TaskFilter — фильтр списка заданий.

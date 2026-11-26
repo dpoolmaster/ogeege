@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -187,8 +188,9 @@ FROM content.topics
 WHERE ($1::uuid IS NULL OR id > $1)
   AND ($2::uuid IS NULL OR exam_id = $2)
   AND ($3::uuid IS NULL OR parent_id = $3)
+  AND ($4::text = '' OR code ILIKE '%' || $4 || '%')
 ORDER BY id
-LIMIT $4
+LIMIT $5
 `
 
 const deleteTopicQuery = `DELETE FROM content.topics WHERE id = $1`
@@ -248,7 +250,7 @@ func (r *PgRepository) GetTopicByCode(ctx context.Context, q db.Querier, examID 
 // ListTopics возвращает страницу тем.
 func (r *PgRepository) ListTopics(ctx context.Context, q db.Querier, filter TopicFilter) ([]Topic, error) {
 	rows, err := q.Query(ctx, listTopicsQuery,
-		nullableUUID(filter.Cursor), nullableUUIDPtr(filter.ExamID), nullableUUIDPtr(filter.ParentID), normalizeLimit(filter.Limit),
+		nullableUUID(filter.Cursor), nullableUUIDPtr(filter.ExamID), nullableUUIDPtr(filter.ParentID), strings.TrimSpace(filter.Code), normalizeLimit(filter.Limit),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("выбрать темы: %w", err)

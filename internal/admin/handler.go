@@ -450,6 +450,7 @@ func (h *Handler) listTopics(c *gin.Context) {
 	if parentID, ok := optionalUUID(c.Query("parent_id")); ok {
 		filter.ParentID = parentID
 	}
+	filter.Code = c.Query("code")
 
 	items, err := h.content.ListTopics(c.Request.Context(), filter)
 	if err != nil {
