@@ -43,6 +43,12 @@ async function open() {
 function close() {
   dialog.value?.close()
 }
+
+function closeOnBackdrop(event) {
+  if (event.target === dialog.value) {
+    close()
+  }
+}
 </script>
 
 <template>
@@ -55,7 +61,7 @@ function close() {
   >
     ?
   </button>
-  <dialog ref="dialog" class="admin-help-dialog">
+  <dialog ref="dialog" class="admin-help-dialog" @click="closeOnBackdrop">
     <article>
       <header>
         <strong>{{ title || 'Справка' }}</strong>
