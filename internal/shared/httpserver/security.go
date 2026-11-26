@@ -2,7 +2,7 @@ package httpserver
 
 import "github.com/gin-gonic/gin"
 
-const contentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+const contentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'self'"
 
 // SecurityHeaders устанавливает базовые заголовки безопасности.
 func SecurityHeaders(env string) gin.HandlerFunc {

@@ -33,7 +33,28 @@ func TestLoadFromEnv(t *testing.T) {
 				if cfg.SMTP.TLS {
 					t.Fatal("SMTP_TLS должен быть false")
 				}
+				if cfg.RateLimit.LoginPerMin != 10 || cfg.RateLimit.APIPerMin != 120 {
+					t.Fatalf("лимиты = %d/%d", cfg.RateLimit.LoginPerMin, cfg.RateLimit.APIPerMin)
+				}
 			},
+		},
+		{
+			name:        "отсутствует RATE_LIMIT_LOGIN_PER_MIN",
+			override:    map[string]string{"RATE_LIMIT_LOGIN_PER_MIN": ""},
+			wantErr:     true,
+			errContains: []string{"RATE_LIMIT_LOGIN_PER_MIN", "обязательна"},
+		},
+		{
+			name:        "нечисловой RATE_LIMIT_API_PER_MIN",
+			override:    map[string]string{"RATE_LIMIT_API_PER_MIN": "many"},
+			wantErr:     true,
+			errContains: []string{"RATE_LIMIT_API_PER_MIN", "целым числом"},
+		},
+		{
+			name:        "нулевой RATE_LIMIT_LOGIN_PER_MIN",
+			override:    map[string]string{"RATE_LIMIT_LOGIN_PER_MIN": "0"},
+			wantErr:     true,
+			errContains: []string{"RATE_LIMIT_LOGIN_PER_MIN", "диапазоне"},
 		},
 		{
 			name:        "отсутствует DATABASE_URL",
@@ -189,6 +210,8 @@ func setFullEnv(t *testing.T, override map[string]string) {
 		"S3_ACCESS_KEY":                 "minio",
 		"S3_SECRET_KEY":                 "minio123",
 		"S3_REGION":                     "us-east-1",
+		"RATE_LIMIT_LOGIN_PER_MIN":      "10",
+		"RATE_LIMIT_API_PER_MIN":        "120",
 	}
 
 	for name, value := range values {

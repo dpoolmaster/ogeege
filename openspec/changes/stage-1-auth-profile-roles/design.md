@@ -142,7 +142,7 @@ auth.Service.Register
 ### 8. HTTP-маршруты и UI
 
 - JSON: `/api/auth/register`, `/login`, `/logout`, `/verify-email`, `/resend-verification`, `/password/reset-request`, `/password/reset`, `/password/change`; профиль: `/api/me`, `/api/me/profile`, `/api/me/goals`, `/api/me/settings`, `/api/me/delete-request` (ТЗ 8.4–8.5).
-- Templ-страницы: `/login`, `/register`, `/verify-email`, `/password/reset` с Pico.css. Формы отправляют POST на JSON-маршруты через HTMX и получают либо редирект, либо фрагмент с ошибкой в едином конверте.
+- Templ-страницы: `/login`, `/register`, `/verify-email`, `/password/reset`, `/account` с Pico.css. SSR-формы отправляют POST на одноимённые страничные маршруты (`/login`, `/register`, `/logout`, `/verify-email`, `/resend-verification`, `/password/reset`, `/password/reset-request`); успех — редирект (PRG), ошибка — повторный рендер страницы. JSON-маршруты `/api/auth/*` остаются для API-потребителей и не используются HTML-формами.
 - Middleware `Auth` кладёт пользователя в контекст; middleware `RequireRole(...)` проверяет роль и возвращает `403` при несоответствии.
 - Неаутентифицированный запрос к защищённому маршруту → `401 unauthorized`.
 

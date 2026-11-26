@@ -14,7 +14,7 @@
 | Этап | Название | Change | Статус |
 |---|---|---|---|
 | 0 | Каркас проекта | `stage-0-platform-foundation` | реализован |
-| 1 | Аутентификация, профиль, роли | `stage-1-auth-profile-roles` | спланирован |
+| 1 | Аутентификация, профиль, роли | `stage-1-auth-profile-roles` | в работе |
 | 2 | Контент, админка, импорт | `stage-2-content-admin-import` | не начат |
 | 3 | Публичный контур | `stage-3-public-site` | не начат |
 | 4 | Диагностика, карта пробелов, план | `stage-4-diagnostics-gap-map-plan` | не начат |
@@ -53,7 +53,7 @@ Change: `stage-1-auth-profile-roles`.
 - Ключевые требования ТЗ: FR-AUTH-01…10, FR-PROF-01…06, SEC-AUTH-01…06, SEC-RBAC-01…05, SEC-PD-01…03.
 - Зависимости: этап 0.
 - Артефакты: `proposal.md`, `specs/{auth,profile,notify}/spec.md`, `design.md`, `tasks.md` — готовы, `openspec validate --strict` проходит.
-- Код не начат. Задачи: 11 групп (миграции, общие компоненты, notify, регистрация, сессии, пароли, лимиты, RBAC, профиль, Templ, проверка).
+- Код реализован: задачи 50/50, `go test ./...` и `golangci-lint` зелёные, покрытие `auth` — 80.4%. Change ожидает архивации.
 - Решения дизайна: серверные сессии, Argon2id, double-submit CSRF на `SESSION_SECRET`, in-memory rate limit + БД `login_attempts`, email через outbox в транзакции `auth`. Новые переменные: `RATE_LIMIT_LOGIN_PER_MIN`, `RATE_LIMIT_API_PER_MIN`.
 
 ### Этап 2. Контент, админка, импорт — L
@@ -152,3 +152,4 @@ Change: `stage-10-notifications-hardening` (не создан).
 | 2026-11-26 | Создан файл. Этап 0 спланирован, этапы 1–10 не начаты. |
 | 2026-11-26 | Этап 1 спланирован: change `stage-1-auth-profile-roles`, capabilities `auth` (13), `profile` (7), `notify` (5). Следующий шаг — этап 2. |
 | 2026-11-26 | Этап 0 реализован: change заархивирован как `2026-11-26-stage-0-platform-foundation`, `platform-foundation` синхронизирован в `openspec/specs`. |
+| 2026-11-26 | Этап 1 реализован: задачи 50/50, тесты и линтер зелёные. Change ожидает архивации. |

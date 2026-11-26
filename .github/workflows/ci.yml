@@ -24,6 +24,7 @@ jobs:
 
     env:
       DATABASE_URL: postgres://oge_ege:oge_ege@localhost:5432/oge_ege?sslmode=disable
+      TEST_DATABASE_URL: postgres://oge_ege:oge_ege@localhost:5432/oge_ege?sslmode=disable
 
     steps:
       - uses: actions/checkout@v4
@@ -46,14 +47,14 @@ jobs:
           make templ
           git diff --exit-code
 
-      - name: Unit-тесты
-        run: go test ./...
-
       - name: Применить и откатить миграции
         run: |
           go run ./cmd/migrate up
           go run ./cmd/migrate down 1
           go run ./cmd/migrate up
+
+      - name: Тесты
+        run: go test ./...
 
       - name: Сборка
         run: go build ./...

@@ -14,6 +14,8 @@ type Options struct {
 	MaxBodyBytes     int64
 	Pinger           Pinger
 	MigrationChecker ReadinessChecker
+	CSRF             gin.HandlerFunc
+	Routes           func(*gin.Engine)
 }
 
 // NewRouter создаёт Gin-роутер с обязательным набором middleware.
@@ -26,9 +28,16 @@ func NewRouter(opts Options) *gin.Engine {
 		SecurityHeaders(opts.Env),
 		BodyLimit(opts.MaxBodyBytes),
 	)
+	if opts.CSRF != nil {
+		router.Use(opts.CSRF)
+	}
 
 	router.GET("/healthz", HealthHandler())
 	router.GET("/readyz", ReadyHandler(opts.Pinger, opts.MigrationChecker))
+
+	if opts.Routes != nil {
+		opts.Routes(router)
+	}
 
 	return router
 }

@@ -16,12 +16,13 @@ import (
 
 // Config содержит все настройки приложения, прочитанные при старте.
 type Config struct {
-	App  AppConfig
-	HTTP HTTPConfig
-	DB   DBConfig
-	Log  LogConfig
-	SMTP SMTPConfig
-	S3   S3Config
+	App       AppConfig
+	HTTP      HTTPConfig
+	DB        DBConfig
+	Log       LogConfig
+	SMTP      SMTPConfig
+	S3        S3Config
+	RateLimit RateLimitConfig
 }
 
 // AppConfig содержит общие настройки приложения.
@@ -70,6 +71,12 @@ type S3Config struct {
 	AccessKey string
 	SecretKey string
 	Region    string
+}
+
+// RateLimitConfig содержит лимиты запросов в минуту.
+type RateLimitConfig struct {
+	LoginPerMin int
+	APIPerMin   int
 }
 
 // Load читает конфигурацию из окружения и локального .env и валидирует её.
@@ -158,6 +165,8 @@ type rawConfig struct {
 	S3AccessKey             string `env:"S3_ACCESS_KEY"`
 	S3SecretKey             string `env:"S3_SECRET_KEY"`
 	S3Region                string `env:"S3_REGION"`
+	RateLimitLoginPerMin    string `env:"RATE_LIMIT_LOGIN_PER_MIN"`
+	RateLimitAPIPerMin      string `env:"RATE_LIMIT_API_PER_MIN"`
 }
 
 type validationErrors []string
@@ -222,6 +231,9 @@ func parseConfig(raw *rawConfig) (*Config, error) {
 	s3SecretKey := requireString(&errs, "S3_SECRET_KEY", raw.S3SecretKey)
 	s3Region := requireString(&errs, "S3_REGION", raw.S3Region)
 
+	rateLimitLogin := parseRequiredInt(&errs, "RATE_LIMIT_LOGIN_PER_MIN", raw.RateLimitLoginPerMin, 1, 100000)
+	rateLimitAPI := parseRequiredInt(&errs, "RATE_LIMIT_API_PER_MIN", raw.RateLimitAPIPerMin, 1, 100000)
+
 	if err := errs.err(); err != nil {
 		return nil, fmt.Errorf("некорректная конфигурация: %w", err)
 	}
@@ -262,6 +274,10 @@ func parseConfig(raw *rawConfig) (*Config, error) {
 			AccessKey: s3AccessKey,
 			SecretKey: s3SecretKey,
 			Region:    s3Region,
+		},
+		RateLimit: RateLimitConfig{
+			LoginPerMin: rateLimitLogin,
+			APIPerMin:   rateLimitAPI,
 		},
 	}, nil
 }
