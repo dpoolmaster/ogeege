@@ -63,6 +63,7 @@ func (h *Handler) Register(group *gin.RouterGroup) {
 	group.GET("/theory", h.listTheory)
 	group.GET("/theory/active", h.getActiveTheory)
 	group.POST("/theory", h.createTheory)
+	group.PATCH("/theory/:id", h.updateTheory)
 	group.POST("/theory/:id/publish", h.publishTheory)
 
 	group.GET("/tasks", h.listTasks)
@@ -582,6 +583,29 @@ func (h *Handler) createTheory(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, toTheoryResponse(theory))
+}
+
+func (h *Handler) updateTheory(c *gin.Context) {
+	id, ok := h.pathID(c)
+	if !ok {
+		return
+	}
+	var req theoryRequest
+	if !h.bind(c, &req) {
+		return
+	}
+	actor, ok := h.actor(c)
+	if !ok {
+		return
+	}
+	theory, err := h.service.UpdateTheory(c.Request.Context(), actor, id, content.TheoryInput{
+		ContentMD: req.ContentMD, UpdatedBy: &actor.ID,
+	})
+	if err != nil {
+		h.writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toTheoryResponse(theory))
 }
 
 func (h *Handler) publishTheory(c *gin.Context) {

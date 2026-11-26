@@ -162,8 +162,20 @@ body {
   font-size: 0.85rem;
 }
 
+.admin-actions-bar {
+  margin-bottom: 1rem;
+}
+
 .admin-error {
   color: var(--pico-del-color);
+}
+
+.theory-row {
+  cursor: pointer;
+}
+
+.theory-row.selected {
+  background: var(--pico-secondary-background);
 }
 
 .admin-help-button {
@@ -220,11 +232,17 @@ body {
   margin-bottom: 0.5rem;
 }
 
-.editor-surface {
+.editor-surface .ProseMirror {
   border: 1px solid var(--pico-muted-border-color);
   border-radius: var(--pico-border-radius);
   padding: 0.75rem;
   min-height: 12rem;
+  outline: none;
+}
+
+.editor-surface .ProseMirror:focus {
+  border-color: var(--pico-primary);
+  box-shadow: 0 0 0 2px var(--pico-primary-focus);
 }
 
 .editor-preview {

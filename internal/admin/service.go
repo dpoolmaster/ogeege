@@ -50,8 +50,10 @@ type ContentAdmin interface {
 	DeleteTopic(ctx context.Context, id uuid.UUID) error
 
 	ListTheoryVersions(ctx context.Context, topicID uuid.UUID) ([]content.Theory, error)
+	GetTheory(ctx context.Context, id uuid.UUID) (*content.Theory, error)
 	GetActiveTheory(ctx context.Context, topicID uuid.UUID) (*content.Theory, error)
 	CreateTheoryVersion(ctx context.Context, in content.TheoryInput) (*content.Theory, error)
+	UpdateTheory(ctx context.Context, id uuid.UUID, in content.TheoryInput) (*content.Theory, error)
 	PublishTheory(ctx context.Context, id uuid.UUID) (*content.Theory, error)
 
 	ListTasks(ctx context.Context, filter content.TaskFilter) ([]content.Task, error)
@@ -460,6 +462,25 @@ func (s *Service) CreateTheoryVersion(ctx context.Context, actor Actor, in conte
 		return nil, err
 	}
 	s.recordAudit(ctx, actor, "create", "theory", &theory.ID, nil, theory)
+
+	return theory, nil
+}
+
+// UpdateTheory изменяет черновую версию теории и пишет аудит.
+func (s *Service) UpdateTheory(ctx context.Context, actor Actor, id uuid.UUID, in content.TheoryInput) (*content.Theory, error) {
+	if err := requireContent(actor); err != nil {
+		return nil, err
+	}
+
+	before, err := s.content.GetTheory(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	theory, err := s.content.UpdateTheory(ctx, id, in)
+	if err != nil {
+		return nil, err
+	}
+	s.recordAudit(ctx, actor, "update", "theory", &id, before, theory)
 
 	return theory, nil
 }

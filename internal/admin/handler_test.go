@@ -107,6 +107,27 @@ func TestAdminHandlerContentAccess(t *testing.T) {
 		}
 	})
 
+	t.Run("редактирование черновика теории", func(t *testing.T) {
+		theoryID := uuid.Must(uuid.NewV7())
+		contentAdmin := &fakeContent{theory: &content.Theory{
+			ID: theoryID, TopicID: uuid.Must(uuid.NewV7()), ContentMD: "Старый текст", Version: 1, Status: content.StatusDraft,
+		}}
+		service := newAdminService(contentAdmin, newFakeUsers(), &fakeAuditRepo{})
+		router := newAdminRouter(methodist, contentAdmin, service)
+
+		rec := perform(t, router, http.MethodPatch, "/api/admin/theory/"+theoryID.String(), `{"content_md":"Новый текст"}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("статус = %d, тело = %s", rec.Code, rec.Body.String())
+		}
+		var body theoryResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("ответ не JSON: %v", err)
+		}
+		if body.ContentMD != "Новый текст" {
+			t.Fatalf("текст = %q", body.ContentMD)
+		}
+	})
+
 	t.Run("импорт с некорректным идентификатором", func(t *testing.T) {
 		contentAdmin := &fakeContent{}
 		service := newAdminService(contentAdmin, newFakeUsers(), &fakeAuditRepo{})

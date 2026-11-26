@@ -23,6 +23,8 @@ type validationRepo struct {
 	topic   *Topic
 	kimLink *KimTopic
 	topics  map[string]*Topic
+	theory  *Theory
+	updated *Theory
 }
 
 func (r *validationRepo) GetExam(_ context.Context, _ db.Querier, id uuid.UUID) (*Exam, error) {
@@ -58,6 +60,18 @@ func (r *validationRepo) GetKimTopic(_ context.Context, _ db.Querier, kimNumberI
 		return nil, ErrNotFound
 	}
 	return r.kimLink, nil
+}
+
+func (r *validationRepo) GetTheory(_ context.Context, _ db.Querier, id uuid.UUID) (*Theory, error) {
+	if r.theory == nil || r.theory.ID != id {
+		return nil, ErrNotFound
+	}
+	return r.theory, nil
+}
+
+func (r *validationRepo) UpdateTheory(_ context.Context, _ db.Querier, theory *Theory) error {
+	r.updated = theory
+	return nil
 }
 
 func TestNormalizeStatement(t *testing.T) {
@@ -186,6 +200,61 @@ func TestServiceRoleIndependentValidation(t *testing.T) {
 	service := NewService(&validationRepo{}, nil, fakeTx{}, fixedClock{}, nil, discardLogger())
 	if _, err := service.CreateExam(context.Background(), ExamInput{}); err == nil {
 		t.Fatal("ожидалась ошибка для пустого кода")
+	}
+}
+
+func TestUpdateTheory(t *testing.T) {
+	theoryID := uuid.Must(uuid.NewV7())
+	base := func(status Status) *Theory {
+		return &Theory{ID: theoryID, TopicID: uuid.Must(uuid.NewV7()), ContentMD: "Старый текст", Version: 1, Status: status}
+	}
+
+	tests := []struct {
+		name    string
+		theory  *Theory
+		input   TheoryInput
+		wantErr error
+		field   string
+	}{
+		{name: "черновик", theory: base(StatusDraft), input: TheoryInput{ContentMD: "Новый текст $x^2$"}},
+		{name: "опубликованная", theory: base(StatusPublished), input: TheoryInput{ContentMD: "Новый текст"}, wantErr: ErrConflict},
+		{name: "нет версии", input: TheoryInput{ContentMD: "Новый текст"}, wantErr: ErrNotFound},
+		{name: "пустой текст", theory: base(StatusDraft), input: TheoryInput{ContentMD: "  "}, field: "content_md"},
+		{name: "плохая формула", theory: base(StatusDraft), input: TheoryInput{ContentMD: "$x^{2$"}, field: "statement_md"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &validationRepo{theory: tt.theory}
+			service := NewService(repo, nil, fakeTx{}, fixedClock{}, nil, discardLogger())
+
+			updated, err := service.UpdateTheory(context.Background(), theoryID, tt.input)
+			switch {
+			case tt.wantErr != nil:
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("ошибка = %v, ожидалось %v", err, tt.wantErr)
+				}
+				return
+			case tt.field != "":
+				var validationErr *ValidationError
+				if !errors.As(err, &validationErr) {
+					t.Fatalf("ожидалась ошибка валидации, получено %v", err)
+				}
+				if validationErr.Field != tt.field {
+					t.Fatalf("поле = %q, ожидалось %q", validationErr.Field, tt.field)
+				}
+				return
+			case err != nil:
+				t.Fatalf("неожиданная ошибка: %v", err)
+			}
+
+			if repo.updated == nil {
+				t.Fatal("версия не сохранена")
+			}
+			if updated.ContentMD != tt.input.ContentMD {
+				t.Fatalf("текст = %q, ожидалось %q", updated.ContentMD, tt.input.ContentMD)
+			}
+		})
 	}
 }
 

@@ -51,6 +51,35 @@ func (s *Service) CreateTheoryVersion(ctx context.Context, in TheoryInput) (*The
 	return theory, nil
 }
 
+// UpdateTheory изменяет текст черновой версии теории.
+func (s *Service) UpdateTheory(ctx context.Context, id uuid.UUID, in TheoryInput) (*Theory, error) {
+	theory, err := s.repo.GetTheory(ctx, s.db, id)
+	if err != nil {
+		return nil, err
+	}
+	if theory.Status != StatusDraft {
+		return nil, fmt.Errorf("изменить опубликованную версию теории: %w", ErrConflict)
+	}
+
+	content, err := required("content_md", in.ContentMD)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateLaTeX(content); err != nil {
+		return nil, err
+	}
+
+	theory.ContentMD = content
+	theory.UpdatedBy = in.UpdatedBy
+	theory.UpdatedAt = s.clock.Now()
+
+	if err := s.repo.UpdateTheory(ctx, s.db, theory); err != nil {
+		return nil, err
+	}
+
+	return theory, nil
+}
+
 // PublishTheory публикует версию теории.
 func (s *Service) PublishTheory(ctx context.Context, id uuid.UUID) (*Theory, error) {
 	theory, err := s.repo.GetTheory(ctx, s.db, id)

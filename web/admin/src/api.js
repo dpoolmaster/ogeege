@@ -32,7 +32,9 @@ export async function api(path, options = {}) {
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
     const error = data.error || {}
-    throw new Error(error.message || 'Ошибка запроса')
+    const failure = new Error(error.message || 'Ошибка запроса')
+    failure.status = response.status
+    throw failure
   }
 
   return data

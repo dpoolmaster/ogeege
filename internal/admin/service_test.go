@@ -20,11 +20,29 @@ import (
 type fakeContent struct {
 	ContentAdmin
 	created []content.ExamInput
+	theory  *content.Theory
 }
 
 func (f *fakeContent) CreateExam(_ context.Context, in content.ExamInput) (*content.Exam, error) {
 	f.created = append(f.created, in)
 	return &content.Exam{ID: uuid.Must(uuid.NewV7()), Code: in.Code, Title: in.Title, Subject: in.Subject, Status: content.StatusDraft}, nil
+}
+
+func (f *fakeContent) GetTheory(_ context.Context, id uuid.UUID) (*content.Theory, error) {
+	if f.theory == nil || f.theory.ID != id {
+		return nil, content.ErrNotFound
+	}
+	return f.theory, nil
+}
+
+func (f *fakeContent) UpdateTheory(_ context.Context, id uuid.UUID, in content.TheoryInput) (*content.Theory, error) {
+	if f.theory == nil || f.theory.ID != id {
+		return nil, content.ErrNotFound
+	}
+	updated := *f.theory
+	updated.ContentMD = in.ContentMD
+	f.theory = &updated
+	return &updated, nil
 }
 
 type fakeUsers struct {
@@ -195,6 +213,44 @@ func TestAuditRecordedAfterMutation(t *testing.T) {
 	}
 	if len(entry.Before) != 0 || len(entry.After) == 0 {
 		t.Fatalf("снимки аудита: before=%s after=%s", entry.Before, entry.After)
+	}
+}
+
+func TestUpdateTheoryRecordsAudit(t *testing.T) {
+	theoryID := uuid.Must(uuid.NewV7())
+	contentAdmin := &fakeContent{theory: &content.Theory{
+		ID: theoryID, TopicID: uuid.Must(uuid.NewV7()), ContentMD: "Старый текст", Version: 1, Status: content.StatusDraft,
+	}}
+	repo := &fakeAuditRepo{}
+	service := newAdminService(contentAdmin, newFakeUsers(), repo)
+	actor := Actor{ID: uuid.Must(uuid.NewV7()), Role: auth.RoleMethodist}
+
+	updated, err := service.UpdateTheory(context.Background(), actor, theoryID, content.TheoryInput{ContentMD: "Новый текст"})
+	if err != nil {
+		t.Fatalf("обновить теорию: %v", err)
+	}
+	if updated.ContentMD != "Новый текст" {
+		t.Fatalf("текст = %q", updated.ContentMD)
+	}
+	if len(repo.entries) != 1 {
+		t.Fatalf("записей аудита = %d", len(repo.entries))
+	}
+	entry := repo.entries[0]
+	if entry.Action != "update" || entry.Entity != "theory" || entry.EntityID == nil || *entry.EntityID != theoryID {
+		t.Fatalf("запись аудита = %+v", entry)
+	}
+	if len(entry.Before) == 0 || len(entry.After) == 0 {
+		t.Fatalf("снимки аудита: before=%s after=%s", entry.Before, entry.After)
+	}
+}
+
+func TestUpdateTheoryForbidden(t *testing.T) {
+	theoryID := uuid.Must(uuid.NewV7())
+	service := newAdminService(&fakeContent{theory: &content.Theory{ID: theoryID, Status: content.StatusDraft}}, newFakeUsers(), &fakeAuditRepo{})
+
+	_, err := service.UpdateTheory(context.Background(), Actor{ID: uuid.Must(uuid.NewV7()), Role: auth.RoleStudent}, theoryID, content.TheoryInput{ContentMD: "Новый текст"})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("ожидалась ошибка доступа, получено %v", err)
 	}
 }
 

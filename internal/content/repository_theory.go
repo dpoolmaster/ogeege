@@ -34,6 +34,12 @@ FROM content.theory
 WHERE id = $1
 `
 
+const updateTheoryQuery = `
+UPDATE content.theory
+SET content_md = $2, updated_by = $3, updated_at = $4
+WHERE id = $1
+`
+
 const getActiveTheoryQuery = `
 SELECT ` + theoryColumns + `
 FROM content.theory
@@ -75,6 +81,17 @@ func (r *PgRepository) CreateTheory(ctx context.Context, q db.Querier, theory *T
 // GetTheory возвращает версию теории по идентификатору.
 func (r *PgRepository) GetTheory(ctx context.Context, q db.Querier, id uuid.UUID) (*Theory, error) {
 	return scanTheory(q.QueryRow(ctx, getTheoryQuery, id))
+}
+
+// UpdateTheory обновляет текст черновой версии теории.
+func (r *PgRepository) UpdateTheory(ctx context.Context, q db.Querier, theory *Theory) error {
+	if _, err := q.Exec(ctx, updateTheoryQuery,
+		theory.ID, theory.ContentMD, theory.UpdatedBy, theory.UpdatedAt,
+	); err != nil {
+		return wrapWriteError("обновить версию теории", err)
+	}
+
+	return nil
 }
 
 // GetActiveTheory возвращает действующую опубликованную версию теории.

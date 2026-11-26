@@ -85,6 +85,20 @@ func TestServiceIntegration(t *testing.T) {
 	if err != nil || len(theoryVersions) != 1 {
 		t.Fatalf("история теории: %v, %d", err, len(theoryVersions))
 	}
+	draft, err := service.CreateTheoryVersion(ctx, TheoryInput{TopicID: child.ID, ContentMD: "Черновик"})
+	if err != nil {
+		t.Fatalf("создать черновик теории: %v", err)
+	}
+	updatedDraft, err := service.UpdateTheory(ctx, draft.ID, TheoryInput{ContentMD: "Черновик изменён $x$"})
+	if err != nil {
+		t.Fatalf("изменить черновик теории: %v", err)
+	}
+	if updatedDraft.ContentMD != "Черновик изменён $x$" || updatedDraft.Version != draft.Version {
+		t.Fatalf("черновик теории = %+v", updatedDraft)
+	}
+	if _, err := service.UpdateTheory(ctx, theory.ID, TheoryInput{ContentMD: "Нельзя"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("опубликованная версия не должна изменяться: %v", err)
+	}
 
 	first := createTask(t, ctx, service, year.ID, kimShort.ID, child.ID, "Задание первое $1+1$")
 	published, err := service.PublishTask(ctx, first.ID)

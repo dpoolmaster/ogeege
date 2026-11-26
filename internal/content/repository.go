@@ -52,6 +52,7 @@ type Repository interface {
 	GetKimTopic(ctx context.Context, q db.Querier, kimNumberID, topicID uuid.UUID) (*KimTopic, error)
 
 	CreateTheory(ctx context.Context, q db.Querier, theory *Theory) error
+	UpdateTheory(ctx context.Context, q db.Querier, theory *Theory) error
 	GetTheory(ctx context.Context, q db.Querier, id uuid.UUID) (*Theory, error)
 	GetActiveTheory(ctx context.Context, q db.Querier, topicID uuid.UUID) (*Theory, error)
 	GetLatestTheoryVersion(ctx context.Context, q db.Querier, topicID uuid.UUID) (int, error)
