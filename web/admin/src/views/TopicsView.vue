@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { api } from '../api'
 
-const items = ref([])
+const allItems = ref([])
 const exams = ref([])
 const error = ref('')
 const filter = reactive({ exam_id: '', parent_id: '', code: '' })
@@ -14,18 +14,69 @@ const examTitles = computed(() => {
   return map
 })
 
-const topicTitles = computed(() => {
-  const map = {}
-  for (const topic of items.value) map[topic.id] = topic.title
-  return map
+const filteredItems = computed(() => {
+  let list = allItems.value
+  if (filter.exam_id) list = list.filter((topic) => topic.exam_id === filter.exam_id)
+  const code = filter.code.trim().toLowerCase()
+  if (code) list = list.filter((topic) => topic.code.toLowerCase().includes(code))
+  if (filter.parent_id) {
+    const byId = new Map(list.map((topic) => [topic.id, topic]))
+    if (!byId.has(filter.parent_id)) return []
+    const children = new Map()
+    for (const topic of list) {
+      if (!topic.parent_id) continue
+      const siblings = children.get(topic.parent_id) || []
+      siblings.push(topic)
+      children.set(topic.parent_id, siblings)
+    }
+    const subtree = new Set()
+    const visit = (id) => {
+      if (subtree.has(id)) return
+      subtree.add(id)
+      for (const child of children.get(id) || []) visit(child.id)
+    }
+    visit(filter.parent_id)
+    list = list.filter((topic) => subtree.has(topic.id))
+  }
+  return list
+})
+
+const rows = computed(() => {
+  const byId = new Map(filteredItems.value.map((topic) => [topic.id, topic]))
+  const children = new Map()
+  const roots = []
+  for (const topic of filteredItems.value) {
+    if (topic.parent_id && byId.has(topic.parent_id)) {
+      const list = children.get(topic.parent_id) || []
+      list.push(topic)
+      children.set(topic.parent_id, list)
+    } else {
+      roots.push(topic)
+    }
+  }
+
+  const sortTopics = (a, b) => a.order_index - b.order_index || a.title.localeCompare(b.title)
+  const result = []
+  const visited = new Set()
+  const visit = (topic, depth) => {
+    if (visited.has(topic.id)) return
+    visited.add(topic.id)
+    result.push({ ...topic, depth })
+    for (const child of (children.get(topic.id) || []).slice().sort(sortTopics)) {
+      visit(child, depth + 1)
+    }
+  }
+  for (const root of roots.slice().sort(sortTopics)) visit(root, 0)
+
+  return result
 })
 
 const formParentOptions = computed(() =>
-  items.value.filter((topic) => topic.exam_id === form.exam_id),
+  allItems.value.filter((topic) => topic.exam_id === form.exam_id),
 )
 
 const filterParentOptions = computed(() =>
-  filter.exam_id ? items.value.filter((topic) => topic.exam_id === filter.exam_id) : items.value,
+  filter.exam_id ? allItems.value.filter((topic) => topic.exam_id === filter.exam_id) : [],
 )
 
 watch(
@@ -45,12 +96,8 @@ watch(
 async function load() {
   error.value = ''
   try {
-    const params = new URLSearchParams({ limit: '200' })
-    if (filter.exam_id) params.set('exam_id', filter.exam_id)
-    if (filter.parent_id) params.set('parent_id', filter.parent_id)
-    if (filter.code.trim()) params.set('code', filter.code.trim())
-    const data = await api('/admin/topics?' + params.toString())
-    items.value = data.items || []
+    const data = await api('/admin/topics?limit=200')
+    allItems.value = data.items || []
   } catch (err) {
     error.value = err.message
   }
@@ -81,6 +128,7 @@ async function create() {
 
 async function remove(item) {
   error.value = ''
+  if (!window.confirm(`Удалить тему «${item.title}»?`)) return
   try {
     await api(`/admin/topics/${item.id}`, { method: 'DELETE' })
     await load()
@@ -108,8 +156,8 @@ onMounted(() => {
     </label>
     <label>
       Родительская тема
-      <select v-model="filter.parent_id">
-        <option value="">Любой родитель</option>
+      <select v-model="filter.parent_id" :disabled="!filter.exam_id">
+        <option value="">{{ filter.exam_id ? 'Любая родительская тема' : 'Сначала выберите трек' }}</option>
         <option v-for="topic in filterParentOptions" :key="topic.id" :value="topic.id">{{ topic.title }}</option>
       </select>
     </label>
@@ -150,16 +198,17 @@ onMounted(() => {
   </form>
   <table>
     <thead>
-      <tr><th>Порядок</th><th>Код</th><th>Название</th><th>Трек</th><th>Родительская тема</th><th></th></tr>
+      <tr><th>Порядок</th><th>Код</th><th>Название</th><th>Трек</th><th></th></tr>
     </thead>
     <tbody>
-      <tr v-for="item in items" :key="item.id">
-        <td>{{ item.order_index }}</td>
-        <td>{{ item.code }}</td>
-        <td>{{ item.title }}</td>
-        <td>{{ examTitles[item.exam_id] || item.exam_id }}</td>
-        <td>{{ item.parent_id ? topicTitles[item.parent_id] || item.parent_id : '' }}</td>
-        <td><button class="secondary" @click="remove(item)">Удалить</button></td>
+      <tr v-for="row in rows" :key="row.id">
+        <td>{{ row.order_index }}</td>
+        <td>{{ row.code }}</td>
+        <td :style="{ paddingLeft: row.depth * 1.5 + 'rem' }">
+          <span v-if="row.depth > 0">└ </span>{{ row.title }}
+        </td>
+        <td>{{ examTitles[row.exam_id] || row.exam_id }}</td>
+        <td><button class="secondary" @click="remove(row)">Удалить</button></td>
       </tr>
     </tbody>
   </table>
