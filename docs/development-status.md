@@ -13,8 +13,8 @@
 
 | Этап | Название | Change | Статус |
 |---|---|---|---|
-| 0 | Каркас проекта | `stage-0-platform-foundation` | спланирован |
-| 1 | Аутентификация, профиль, роли | `stage-1-auth-profile-roles` | не начат |
+| 0 | Каркас проекта | `stage-0-platform-foundation` | реализован |
+| 1 | Аутентификация, профиль, роли | `stage-1-auth-profile-roles` | спланирован |
 | 2 | Контент, админка, импорт | `stage-2-content-admin-import` | не начат |
 | 3 | Публичный контур | `stage-3-public-site` | не начат |
 | 4 | Диагностика, карта пробелов, план | `stage-4-diagnostics-gap-map-plan` | не начат |
@@ -27,29 +27,34 @@
 
 ## Следующий шаг
 
-**Этап 1 — Аутентификация, профиль, роли.**
+**Этап 2 — Контент, админка, импорт.**
 
 - Спланировать change: промпт `prompts/plan-next-stage.md`.
-- Затрагиваемые capability: `auth` (новый), `profile` (новый), `notify` (email-outbox часть).
-- Зависимости: этап 0.
+- Затрагиваемые capability: `content` (новый), `admin` (новый).
+- Зависимости: этап 1 (роли, аудит).
+- Учесть из дизайна этапа 1: управление пользователями и ролями (FR-ADM-07) входит в `admin`; проверка `exam_id` учебных целей через `content` добавляется на этапе 2.
 
 ## Детали по этапам
 
 ### Этап 0. Каркас проекта — S
 
-Change: `stage-0-platform-foundation`.
+Change: `stage-0-platform-foundation` (заархивирован как `2026-11-26-stage-0-platform-foundation`).
 
-- Capability: `platform-foundation`.
-- Артефакты: `proposal.md`, `specs/platform-foundation/spec.md`, `design.md`, `tasks.md` — готовы, `openspec validate --strict` проходит.
-- Код не начат. Задачи: 9 групп (каркас, конфиг, БД/транзакции, миграции, HTTP/middleware, логи/ids, инфраструктура, инструменты/CI, проверка).
+- Capability: `platform-foundation` (10 требований, синхронизирована в `openspec/specs/platform-foundation`).
+- Артефакты: `proposal.md`, `specs/platform-foundation/spec.md`, `design.md`, `tasks.md` — готовы.
+- Реализовано: задачи 32/32, `go build ./...`, `go test ./...` и `golangci-lint` зелёные.
+- Задачи: 9 групп (каркас, конфиг, БД/транзакции, миграции, HTTP/middleware, логи/ids, инфраструктура, инструменты/CI, проверка).
 
 ### Этап 1. Аутентификация, профиль, роли — M
 
-Change: `stage-1-auth-profile-roles` (не создан).
+Change: `stage-1-auth-profile-roles`.
 
-- Capability: `auth`, `profile`, `notify` (только email-outbox и шаблоны подтверждения/сброса).
-- Ключевые требования ТЗ: FR-AUTH-01…10, FR-PROF-01…06, SEC-AUTH-01…06, SEC-RBAC-01…05.
+- Capability: `auth` (13 требований), `profile` (7 требований), `notify` (5 требований; только email-outbox и шаблоны подтверждения/сброса).
+- Ключевые требования ТЗ: FR-AUTH-01…10, FR-PROF-01…06, SEC-AUTH-01…06, SEC-RBAC-01…05, SEC-PD-01…03.
 - Зависимости: этап 0.
+- Артефакты: `proposal.md`, `specs/{auth,profile,notify}/spec.md`, `design.md`, `tasks.md` — готовы, `openspec validate --strict` проходит.
+- Код не начат. Задачи: 11 групп (миграции, общие компоненты, notify, регистрация, сессии, пароли, лимиты, RBAC, профиль, Templ, проверка).
+- Решения дизайна: серверные сессии, Argon2id, double-submit CSRF на `SESSION_SECRET`, in-memory rate limit + БД `login_attempts`, email через outbox в транзакции `auth`. Новые переменные: `RATE_LIMIT_LOGIN_PER_MIN`, `RATE_LIMIT_API_PER_MIN`.
 
 ### Этап 2. Контент, админка, импорт — L
 
@@ -58,6 +63,7 @@ Change: `stage-2-content-admin-import` (не создан).
 - Capability: `content`, `admin`.
 - Ключевые требования ТЗ: FR-CONT-01…10, FR-ADM-01…12, FR-IMP-01…07, QC-01…06.
 - Зависимости: этап 1 (роли, аудит).
+- Из этапа 1: управление пользователями и смена ролей (FR-ADM-07) входят в `admin`; `exam_id` учебных целей начинает проверяться через `content`.
 
 ### Этап 3. Публичный контур — M
 
@@ -114,6 +120,7 @@ Change: `stage-9-freemium-subscriptions-yookassa` (не создан).
 - Capability: `billing`.
 - Ключевые требования ТЗ: FR-BILL-01…11, SEC-PAY-01…05, состояния подписки.
 - Зависимости: этапы 1 и 2.
+- Из этапа 1: при удалении аккаунта платёжные записи сохраняются в обезличенном виде; добавить это к обезличиванию этапа 1.
 
 ### Этап 10. Уведомления, безопасность, полировка — M
 
@@ -122,6 +129,7 @@ Change: `stage-10-notifications-hardening` (не создан).
 - Capability: `notify` (in-app, напоминания), `platform-foundation` (метрики, security headers).
 - Ключевые требования ТЗ: FR-NOTIF-01…07, SEC-WEB-01…08, NFR-20…24, NFR-40…43.
 - Зависимости: все предыдущие.
+- Из этапа 1: перенести rate limit на общее хранилище при горизонтальном масштабировании; добавить метрики по auth и outbox.
 
 ## Порядок зависимостей
 
@@ -142,3 +150,5 @@ Change: `stage-10-notifications-hardening` (не создан).
 | Дата | Изменение |
 |---|---|
 | 2026-11-26 | Создан файл. Этап 0 спланирован, этапы 1–10 не начаты. |
+| 2026-11-26 | Этап 1 спланирован: change `stage-1-auth-profile-roles`, capabilities `auth` (13), `profile` (7), `notify` (5). Следующий шаг — этап 2. |
+| 2026-11-26 | Этап 0 реализован: change заархивирован как `2026-11-26-stage-0-platform-foundation`, `platform-foundation` синхронизирован в `openspec/specs`. |
