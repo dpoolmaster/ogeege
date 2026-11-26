@@ -34,6 +34,18 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/admin/package-lock.json
+
+      - name: Сборка SPA админки
+        working-directory: web/admin
+        run: |
+          npm ci
+          npm run build
+
       - name: Линтер
         uses: golangci/golangci-lint-action@v7
         with:

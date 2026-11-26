@@ -611,6 +611,60 @@ func (s *Service) AnonymizeAccount(ctx context.Context, userID uuid.UUID) error 
 	})
 }
 
+// GetUser возвращает пользователя по идентификатору.
+func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
+	return s.repo.GetUserByID(ctx, s.db, id)
+}
+
+// SearchUsers ищет пользователей по email или идентификатору.
+func (s *Service) SearchUsers(ctx context.Context, query string, cursor uuid.UUID, limit int) ([]User, error) {
+	return s.repo.SearchUsers(ctx, s.db, strings.TrimSpace(query), cursor, limit)
+}
+
+// SetUserRole меняет роль пользователя.
+func (s *Service) SetUserRole(ctx context.Context, id uuid.UUID, role Role) (*User, error) {
+	if !role.Valid() {
+		return nil, ErrInvalidRole
+	}
+	if _, err := s.repo.GetUserByID(ctx, s.db, id); err != nil {
+		return nil, err
+	}
+
+	now := s.clock.Now()
+	if err := s.repo.UpdateUserRole(ctx, s.db, id, role, now); err != nil {
+		return nil, err
+	}
+
+	return s.repo.GetUserByID(ctx, s.db, id)
+}
+
+// SetUserStatus меняет статус пользователя и отзывает сессии при блокировке.
+func (s *Service) SetUserStatus(ctx context.Context, id uuid.UUID, status Status) (*User, error) {
+	if !status.Valid() {
+		return nil, ErrInvalidRole
+	}
+	if _, err := s.repo.GetUserByID(ctx, s.db, id); err != nil {
+		return nil, err
+	}
+
+	now := s.clock.Now()
+	err := s.tx.WithTx(ctx, func(q db.Querier) error {
+		if err := s.repo.UpdateUserStatus(ctx, q, id, status, now); err != nil {
+			return err
+		}
+		if status == StatusBlocked || status == StatusAnonymized {
+			return s.repo.RevokeUserSessions(ctx, q, id, now)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return s.repo.GetUserByID(ctx, s.db, id)
+}
+
 func (s *Service) recordAttempt(ctx context.Context, email, ip string, success bool) error {
 	id, err := ids.New()
 	if err != nil {

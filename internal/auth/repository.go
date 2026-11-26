@@ -20,6 +20,9 @@ type Repository interface {
 	MarkEmailVerified(ctx context.Context, q db.Querier, id uuid.UUID, now time.Time) error
 	UpdatePasswordHash(ctx context.Context, q db.Querier, id uuid.UUID, hash string, now time.Time) error
 	AnonymizeUser(ctx context.Context, q db.Querier, id uuid.UUID, now time.Time) error
+	SearchUsers(ctx context.Context, q db.Querier, query string, cursor uuid.UUID, limit int) ([]User, error)
+	UpdateUserRole(ctx context.Context, q db.Querier, id uuid.UUID, role Role, now time.Time) error
+	UpdateUserStatus(ctx context.Context, q db.Querier, id uuid.UUID, status Status, now time.Time) error
 
 	CreateEmailVerification(ctx context.Context, q db.Querier, verification *Verification) error
 	GetEmailVerificationByHash(ctx context.Context, q db.Querier, tokenHash []byte) (*Verification, error)
@@ -88,6 +91,27 @@ WHERE id = $1
 const anonymizeUserQuery = `
 UPDATE auth.users
 SET email = $2, password_hash = '!', status = 'anonymized', updated_at = $3
+WHERE id = $1
+`
+
+const searchUsersQuery = `
+SELECT ` + userColumns + `
+FROM auth.users
+WHERE ($1::uuid IS NULL OR id > $1)
+  AND ($2::text = '' OR email ILIKE '%' || $2 || '%' OR id::text = $2)
+ORDER BY id
+LIMIT $3
+`
+
+const updateUserRoleQuery = `
+UPDATE auth.users
+SET role = $2, updated_at = $3
+WHERE id = $1
+`
+
+const updateUserStatusQuery = `
+UPDATE auth.users
+SET status = $2, updated_at = $3
 WHERE id = $1
 `
 
@@ -270,6 +294,47 @@ func (r *PgRepository) AnonymizeUser(ctx context.Context, q db.Querier, id uuid.
 	email := fmt.Sprintf("deleted+%s@anonymized.invalid", id)
 	if _, err := q.Exec(ctx, anonymizeUserQuery, id, email, now); err != nil {
 		return fmt.Errorf("обезличить пользователя: %w", err)
+	}
+
+	return nil
+}
+
+// SearchUsers ищет пользователей по email или идентификатору.
+func (r *PgRepository) SearchUsers(ctx context.Context, q db.Querier, query string, cursor uuid.UUID, limit int) ([]User, error) {
+	rows, err := q.Query(ctx, searchUsersQuery, nullableUUID(cursor), query, normalizeLimit(limit))
+	if err != nil {
+		return nil, fmt.Errorf("найти пользователей: %w", err)
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		user, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, *user)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("прочитать пользователей: %w", err)
+	}
+
+	return users, nil
+}
+
+// UpdateUserRole меняет роль пользователя.
+func (r *PgRepository) UpdateUserRole(ctx context.Context, q db.Querier, id uuid.UUID, role Role, now time.Time) error {
+	if _, err := q.Exec(ctx, updateUserRoleQuery, id, string(role), now); err != nil {
+		return fmt.Errorf("изменить роль пользователя: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateUserStatus меняет статус пользователя.
+func (r *PgRepository) UpdateUserStatus(ctx context.Context, q db.Querier, id uuid.UUID, status Status, now time.Time) error {
+	if _, err := q.Exec(ctx, updateUserStatusQuery, id, string(status), now); err != nil {
+		return fmt.Errorf("изменить статус пользователя: %w", err)
 	}
 
 	return nil
@@ -463,6 +528,30 @@ func (r *PgRepository) RevokeOtherUserSessions(ctx context.Context, q db.Querier
 	}
 
 	return nil
+}
+
+func nullableUUID(id uuid.UUID) any {
+	if id == uuid.Nil {
+		return nil
+	}
+
+	return id
+}
+
+func normalizeLimit(limit int) int {
+	const (
+		defaultLimit = 50
+		maxLimit     = 200
+	)
+
+	if limit <= 0 {
+		return defaultLimit
+	}
+	if limit > maxLimit {
+		return maxLimit
+	}
+
+	return limit
 }
 
 type userScanner interface {

@@ -42,6 +42,16 @@ const (
 	StatusAnonymized Status = "anonymized"
 )
 
+// Valid сообщает, известно ли состояние учётной записи.
+func (s Status) Valid() bool {
+	switch s {
+	case StatusUnverified, StatusActive, StatusBlocked, StatusAnonymized:
+		return true
+	default:
+		return false
+	}
+}
+
 // User — учётная запись.
 type User struct {
 	ID              uuid.UUID

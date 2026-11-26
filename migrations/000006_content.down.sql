@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS content.score_scales;
+DROP TABLE IF EXISTS content.rubrics;
+DROP TABLE IF EXISTS content.variant_tasks;
+DROP TABLE IF EXISTS content.variants;
+DROP TABLE IF EXISTS content.task_attachments;
+DROP TABLE IF EXISTS content.task_options;
+DROP TABLE IF EXISTS content.task_versions;
+DROP TABLE IF EXISTS content.tasks;
+DROP TABLE IF EXISTS content.theory;
+DROP TABLE IF EXISTS content.kim_topics;
+DROP TABLE IF EXISTS content.topics;
+DROP TABLE IF EXISTS content.kim_numbers;
+DROP TABLE IF EXISTS content.exam_years;
+DROP TABLE IF EXISTS content.exams;

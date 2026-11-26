@@ -1,0 +1,305 @@
+package content
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+
+	"oge-ege/internal/shared/db"
+)
+
+type validationRepo struct {
+	Repository
+	exam    *Exam
+	year    *ExamYear
+	kim     *KimNumber
+	topic   *Topic
+	kimLink *KimTopic
+	topics  map[string]*Topic
+}
+
+func (r *validationRepo) GetExam(_ context.Context, _ db.Querier, id uuid.UUID) (*Exam, error) {
+	if r.exam == nil || r.exam.ID != id {
+		return nil, ErrNotFound
+	}
+	return r.exam, nil
+}
+
+func (r *validationRepo) GetExamYear(_ context.Context, _ db.Querier, id uuid.UUID) (*ExamYear, error) {
+	if r.year == nil || r.year.ID != id {
+		return nil, ErrNotFound
+	}
+	return r.year, nil
+}
+
+func (r *validationRepo) GetKimNumber(_ context.Context, _ db.Querier, id uuid.UUID) (*KimNumber, error) {
+	if r.kim == nil || r.kim.ID != id {
+		return nil, ErrNotFound
+	}
+	return r.kim, nil
+}
+
+func (r *validationRepo) GetTopic(_ context.Context, _ db.Querier, id uuid.UUID) (*Topic, error) {
+	if r.topic == nil || r.topic.ID != id {
+		return nil, ErrNotFound
+	}
+	return r.topic, nil
+}
+
+func (r *validationRepo) GetKimTopic(_ context.Context, _ db.Querier, kimNumberID, topicID uuid.UUID) (*KimTopic, error) {
+	if r.kimLink == nil || r.kimLink.KimNumberID != kimNumberID || r.kimLink.TopicID != topicID {
+		return nil, ErrNotFound
+	}
+	return r.kimLink, nil
+}
+
+func TestNormalizeStatement(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "пробелы", in: "  a   b  ", want: "a b"},
+		{name: "переносы", in: "a\r\nb\rc", want: "a b c"},
+		{name: "формула", in: "$ x^2 $", want: "$ x^2 $"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizeStatement(tt.in); got != tt.want {
+				t.Fatalf("NormalizeStatement = %q, ожидалось %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestContentHash(t *testing.T) {
+	first := ContentHash("Найдите  x + 1")
+	second := ContentHash("  Найдите x + 1  ")
+	if !bytes.Equal(first, second) {
+		t.Fatal("эквивалентные условия должны иметь одинаковый хеш")
+	}
+	if bytes.Equal(first, ContentHash("Найдите x + 2")) {
+		t.Fatal("разные условия не должны иметь одинаковый хеш")
+	}
+}
+
+func TestValidateAnswerSpec(t *testing.T) {
+	tests := []struct {
+		name    string
+		spec    string
+		wantErr bool
+	}{
+		{name: "число", spec: `{"kind":"number"}`},
+		{name: "интервал", spec: `{"kind":"interval"}`},
+		{name: "развёрнутый", spec: `{"kind":"extended"}`},
+		{name: "пусто", spec: ``, wantErr: true},
+		{name: "не JSON", spec: `{`, wantErr: true},
+		{name: "неизвестный тип", spec: `{"kind":"unknown"}`, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateAnswerSpec([]byte(tt.spec))
+			if tt.wantErr && err == nil {
+				t.Fatal("ожидалась ошибка")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("неожиданная ошибка: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateTask(t *testing.T) {
+	examID := uuid.Must(uuid.NewV7())
+	otherExamID := uuid.Must(uuid.NewV7())
+	yearID := uuid.Must(uuid.NewV7())
+	kimID := uuid.Must(uuid.NewV7())
+	topicID := uuid.Must(uuid.NewV7())
+	otherTopicID := uuid.Must(uuid.NewV7())
+
+	base := validationRepo{
+		exam:  &Exam{ID: examID, Code: "oge_math", Status: StatusPublished},
+		year:  &ExamYear{ID: yearID, ExamID: examID, Year: 2026},
+		kim:   &KimNumber{ID: kimID, ExamYearID: yearID, Number: 1, Part: 1, MaxPrimaryScore: 1},
+		topic: &Topic{ID: topicID, ExamID: examID, Code: "numbers"},
+	}
+	valid := TaskInput{
+		ExamYearID: yearID, KimNumberID: kimID, TopicID: &topicID,
+		Difficulty: DifficultyEasy, StatementMD: "Вычислите $1+1$",
+		AnswerSpec: json.RawMessage(`{"kind":"number","accepted":["2"]}`), Source: "seed",
+	}
+
+	t.Run("успех", func(t *testing.T) {
+		repo := base
+		repo.kimLink = &KimTopic{KimNumberID: kimID, TopicID: topicID}
+		svc := NewService(&repo, nil, fakeTx{}, fixedClock{}, nil, discardLogger())
+		if err := svc.validateTask(context.Background(), valid, true); err != nil {
+			t.Fatalf("неожиданная ошибка: %v", err)
+		}
+	})
+
+	tests := []struct {
+		name  string
+		repo  validationRepo
+		input TaskInput
+		field string
+	}{
+		{name: "нет года", repo: validationRepo{exam: base.exam, kim: base.kim, topic: base.topic}, input: valid, field: "exam_year_id"},
+		{name: "нет номера", repo: validationRepo{exam: base.exam, year: base.year, topic: base.topic}, input: valid, field: "kim_number_id"},
+		{name: "другой год", repo: validationRepo{exam: base.exam, year: base.year, kim: &KimNumber{ID: kimID, ExamYearID: uuid.Must(uuid.NewV7())}, topic: base.topic}, input: valid, field: "kim_number_id"},
+		{name: "плохая сложность", repo: base, input: withField(valid, func(in *TaskInput) { in.Difficulty = "unknown" }), field: "difficulty"},
+		{name: "пустое условие", repo: base, input: withField(valid, func(in *TaskInput) { in.StatementMD = " " }), field: "statement_md"},
+		{name: "плохой answer_spec", repo: base, input: withField(valid, func(in *TaskInput) { in.AnswerSpec = []byte(`{"kind":"x"}`) }), field: "answer_spec"},
+		{name: "плохая формула", repo: base, input: withField(valid, func(in *TaskInput) { in.StatementMD = "$x^{2$" }), field: "statement_md"},
+		{name: "чужая тема", repo: validationRepo{exam: base.exam, year: base.year, kim: base.kim, topic: &Topic{ID: otherTopicID, ExamID: otherExamID}}, input: withField(valid, func(in *TaskInput) { in.TopicID = &otherTopicID }), field: "topic_id"},
+		{name: "публикация без темы", repo: base, input: withField(valid, func(in *TaskInput) { in.TopicID = nil }), field: "topic_id"},
+		{name: "тема не связана", repo: base, input: valid, field: "topic_id"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := tt.repo
+			svc := NewService(&repo, nil, fakeTx{}, fixedClock{}, nil, discardLogger())
+			forPublish := tt.name == "публикация без темы" || tt.name == "тема не связана"
+			err := svc.validateTask(context.Background(), tt.input, forPublish)
+			var validationErr *ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("ожидалась ошибка валидации, получено %v", err)
+			}
+			if validationErr.Field != tt.field {
+				t.Fatalf("поле = %q, ожидалось %q", validationErr.Field, tt.field)
+			}
+		})
+	}
+}
+
+func TestServiceRoleIndependentValidation(t *testing.T) {
+	service := NewService(&validationRepo{}, nil, fakeTx{}, fixedClock{}, nil, discardLogger())
+	if _, err := service.CreateExam(context.Background(), ExamInput{}); err == nil {
+		t.Fatal("ожидалась ошибка для пустого кода")
+	}
+}
+
+func withField(input TaskInput, mutate func(*TaskInput)) TaskInput {
+	mutate(&input)
+	return input
+}
+
+type fakeTx struct{}
+
+func (fakeTx) WithTx(ctx context.Context, fn func(q db.Querier) error) error {
+	return fn(nil)
+}
+
+type fixedClock struct{}
+
+func (fixedClock) Now() time.Time {
+	return time.Date(2026, time.November, 26, 12, 0, 0, 0, time.UTC)
+}
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func (r *validationRepo) CreateTopic(_ context.Context, _ db.Querier, topic *Topic) error {
+	if r.topics == nil {
+		r.topics = make(map[string]*Topic)
+	}
+	key := topic.ExamID.String() + "/" + topic.Code
+	if _, ok := r.topics[key]; ok {
+		return ErrConflict
+	}
+	r.topics[key] = topic
+	return nil
+}
+
+func TestCreateTopicHierarchy(t *testing.T) {
+	examID := uuid.Must(uuid.NewV7())
+	otherExamID := uuid.Must(uuid.NewV7())
+	parentID := uuid.Must(uuid.NewV7())
+
+	tests := []struct {
+		name    string
+		parent  *uuid.UUID
+		setup   func(*validationRepo)
+		wantErr bool
+		field   string
+	}{
+		{name: "корневая тема", setup: func(r *validationRepo) {}},
+		{name: "вложенная тема", parent: &parentID, setup: func(r *validationRepo) {
+			r.topic = &Topic{ID: parentID, ExamID: examID, Code: "parent"}
+		}},
+		{name: "чужой родитель", parent: &parentID, setup: func(r *validationRepo) {
+			r.topic = &Topic{ID: parentID, ExamID: otherExamID, Code: "parent"}
+		}, wantErr: true, field: "parent_id"},
+		{name: "нет родителя", parent: &parentID, setup: func(r *validationRepo) {}, wantErr: true, field: "parent_id"},
+		{name: "дубликат кода", setup: func(r *validationRepo) {
+			r.topics = map[string]*Topic{examID.String() + "/numbers": {ID: uuid.Must(uuid.NewV7()), ExamID: examID, Code: "numbers"}}
+		}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &validationRepo{exam: &Exam{ID: examID, Code: "oge", Status: StatusPublished}}
+			tt.setup(repo)
+			service := NewService(repo, nil, fakeTx{}, fixedClock{}, nil, discardLogger())
+
+			_, err := service.CreateTopic(context.Background(), TopicInput{
+				ExamID: examID, ParentID: tt.parent, Code: "numbers", Title: "Числа", OrderIndex: 1,
+			})
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("ожидалась ошибка")
+				}
+				if tt.field != "" {
+					var validationErr *ValidationError
+					if !errors.As(err, &validationErr) || validationErr.Field != tt.field {
+						t.Fatalf("ошибка = %v, ожидалось поле %q", err, tt.field)
+					}
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("неожиданная ошибка: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateRubricSum(t *testing.T) {
+	yearID := uuid.Must(uuid.NewV7())
+	kimID := uuid.Must(uuid.NewV7())
+	repo := &validationRepo{
+		kim: &KimNumber{ID: kimID, ExamYearID: yearID, Number: 2, Part: 2, MaxPrimaryScore: 2},
+	}
+	service := NewService(repo, nil, fakeTx{}, fixedClock{}, nil, discardLogger())
+
+	t.Run("сумма совпадает", func(t *testing.T) {
+		if _, err := service.validateRubric(context.Background(), RubricInput{
+			KimNumberID: kimID, ExamYearID: yearID,
+			Criteria: RubricCriteria{{Code: "C1", Description: "Решение", MaxPoints: 2}},
+		}); err != nil {
+			t.Fatalf("неожиданная ошибка: %v", err)
+		}
+	})
+
+	t.Run("сумма не совпадает", func(t *testing.T) {
+		_, err := service.validateRubric(context.Background(), RubricInput{
+			KimNumberID: kimID, ExamYearID: yearID,
+			Criteria: RubricCriteria{{Code: "C1", Description: "Решение", MaxPoints: 3}},
+		})
+		var validationErr *ValidationError
+		if !errors.As(err, &validationErr) || validationErr.Field != "criteria" {
+			t.Fatalf("ошибка = %v", err)
+		}
+	})
+}

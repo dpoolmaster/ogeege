@@ -222,6 +222,8 @@ func (h *Handler) writeError(c *gin.Context, err error) {
 		httpserver.AbortWithFields(c, http.StatusUnprocessableEntity, "validation_failed", err.Error(), map[string]string{"grade": err.Error()})
 	case errors.Is(err, ErrInvalidExamID):
 		httpserver.AbortWithFields(c, http.StatusUnprocessableEntity, "validation_failed", err.Error(), map[string]string{"exam_id": err.Error()})
+	case errors.Is(err, ErrExamUnavailable):
+		httpserver.AbortWithFields(c, http.StatusUnprocessableEntity, "validation_failed", err.Error(), map[string]string{"exam_id": err.Error()})
 	case errors.Is(err, ErrInvalidExamDate):
 		httpserver.AbortWithFields(c, http.StatusUnprocessableEntity, "validation_failed", err.Error(), map[string]string{"exam_date": err.Error()})
 	case errors.Is(err, ErrInvalidTargetScore):

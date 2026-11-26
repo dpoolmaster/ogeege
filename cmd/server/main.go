@@ -12,7 +12,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"oge-ege/internal/admin"
 	"oge-ege/internal/auth"
+	"oge-ege/internal/content"
+	"oge-ege/internal/help"
 	"oge-ege/internal/notify"
 	"oge-ege/internal/profile"
 	"oge-ege/internal/shared/clock"
@@ -22,7 +25,9 @@ import (
 	"oge-ege/internal/shared/logging"
 	"oge-ege/internal/shared/mailer"
 	"oge-ege/internal/shared/render"
+	"oge-ege/internal/shared/storage"
 	"oge-ege/migrations"
+	webadmin "oge-ege/web/admin"
 )
 
 const notifyInterval = 10 * time.Second
@@ -73,8 +78,29 @@ func run() error {
 	authRepo := auth.NewPgRepository()
 	authService := auth.NewService(authRepo, pool, txManager, notifyService, clk, cfg.App.BaseURL, logger)
 
+	contentRepo := content.NewPgRepository()
+	contentService := content.NewService(contentRepo, pool, txManager, clk, nil, logger)
+
 	profileRepo := profile.NewPgRepository()
-	profileService := profile.NewService(profileRepo, pool, txManager, clk, authService, logger)
+	profileService := profile.NewService(profileRepo, pool, txManager, clk, authService, logger, contentService)
+
+	storageStore, err := storage.NewMinIO(storage.Options{
+		Endpoint:  cfg.S3.Endpoint,
+		Bucket:    cfg.S3.Bucket,
+		AccessKey: cfg.S3.AccessKey,
+		SecretKey: cfg.S3.SecretKey,
+		Region:    cfg.S3.Region,
+	})
+	if err != nil {
+		return fmt.Errorf("настроить объектное хранилище: %w", err)
+	}
+
+	adminRepo := admin.NewPgRepository()
+	adminService := admin.NewService(contentService, authService, adminRepo, pool, txManager, clk, logger)
+	adminHandler := admin.NewHandler(contentService, adminService, storageStore, logger)
+
+	helpService := help.NewService()
+	helpHandler := help.NewHandler(helpService)
 
 	csrf := httpserver.NewCSRF(cfg.App.SessionSecret, cfg.App.Env == "production", auth.SessionTokenFromRequest)
 	authHandler := auth.NewHandler(authService, csrf, profileService, logger)
@@ -91,7 +117,7 @@ func run() error {
 		MigrationChecker: db.NewMigrationChecker(db.NewPgMigrationStateReader(pool), latestMigration),
 		CSRF:             csrf.Middleware(),
 		Routes: func(router *gin.Engine) {
-			registerRoutes(router, authService, authHandler, profileHandler, loginLimiter, apiLimiter)
+			registerRoutes(router, authService, authHandler, profileHandler, adminHandler, helpHandler, storageStore, loginLimiter, apiLimiter)
 		},
 	})
 
@@ -143,6 +169,9 @@ func registerRoutes(
 	authService *auth.Service,
 	authHandler *auth.Handler,
 	profileHandler *profile.Handler,
+	adminHandler *admin.Handler,
+	helpHandler *help.Handler,
+	storageStore storage.Store,
 	loginLimiter *httpserver.RateLimiter,
 	apiLimiter *httpserver.RateLimiter,
 ) {
@@ -187,6 +216,18 @@ func registerRoutes(
 	me.GET("/settings", profileHandler.GetSettings)
 	me.PATCH("/settings", profileHandler.UpdateSettings)
 	me.POST("/delete-request", profileHandler.DeleteRequest)
+
+	adminGroup := api.Group("/admin", auth.Auth(authService), auth.RequireRole(auth.RoleMethodist, auth.RoleAdmin))
+	adminHandler.Register(adminGroup)
+	adminOnly := adminGroup.Group("", auth.RequireRole(auth.RoleAdmin))
+	adminHandler.RegisterAdminOnly(adminOnly)
+
+	helpGroup := api.Group("", auth.Auth(authService), auth.RequireRole(auth.RoleMethodist, auth.RoleAdmin))
+	helpHandler.Register(helpGroup)
+
+	router.GET("/media/*key", apiLimiter.Middleware(httpserver.ClientIPKey), storage.MediaHandler(storageStore))
+	router.GET("/admin", webadmin.Handler())
+	router.GET("/admin/*path", webadmin.Handler())
 }
 
 func setGinMode(env string) {

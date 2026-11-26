@@ -304,6 +304,44 @@ func (f *fakeRepo) RevokeOtherUserSessions(_ context.Context, _ db.Querier, user
 	return nil
 }
 
+func (f *fakeRepo) SearchUsers(_ context.Context, _ db.Querier, query string, cursor uuid.UUID, limit int) ([]User, error) {
+	query = strings.ToLower(strings.TrimSpace(query))
+	var users []User
+	for _, user := range f.usersByID {
+		if cursor != uuid.Nil && user.ID.String() <= cursor.String() {
+			continue
+		}
+		if query != "" && !strings.Contains(strings.ToLower(user.Email), query) && user.ID.String() != query {
+			continue
+		}
+		users = append(users, *user)
+	}
+	if limit > 0 && len(users) > limit {
+		users = users[:limit]
+	}
+	return users, nil
+}
+
+func (f *fakeRepo) UpdateUserRole(_ context.Context, _ db.Querier, id uuid.UUID, role Role, now time.Time) error {
+	user, ok := f.usersByID[id]
+	if !ok {
+		return errors.New("пользователь не найден")
+	}
+	user.Role = role
+	user.UpdatedAt = now
+	return nil
+}
+
+func (f *fakeRepo) UpdateUserStatus(_ context.Context, _ db.Querier, id uuid.UUID, status Status, now time.Time) error {
+	user, ok := f.usersByID[id]
+	if !ok {
+		return errors.New("пользователь не найден")
+	}
+	user.Status = status
+	user.UpdatedAt = now
+	return nil
+}
+
 type testEnv struct {
 	service  *Service
 	repo     *fakeRepo

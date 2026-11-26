@@ -29,6 +29,8 @@ var (
 	ErrInvalidGrade = errors.New("класс должен быть от 1 до 11")
 	// ErrInvalidExamID возвращается при некорректном идентификаторе трека.
 	ErrInvalidExamID = errors.New("некорректный идентификатор трека")
+	// ErrExamUnavailable возвращается, когда трек не существует или не опубликован.
+	ErrExamUnavailable = errors.New("трек не найден или не опубликован")
 	// ErrInvalidExamDate возвращается при дате экзамена в прошлом.
 	ErrInvalidExamDate = errors.New("дата экзамена должна быть в будущем")
 	// ErrInvalidTargetScore возвращается при недопустимом целевом балле.
@@ -47,6 +49,11 @@ type TxManager interface {
 // AccountAnonymizer обезличивает учётную запись в модуле auth.
 type AccountAnonymizer interface {
 	AnonymizeAccount(ctx context.Context, userID uuid.UUID) error
+}
+
+// ExamProvider проверяет доступность учебного трека.
+type ExamProvider interface {
+	IsExamAvailable(ctx context.Context, examID uuid.UUID) (bool, error)
 }
 
 // ProfileInput содержит данные для сохранения профиля.
@@ -69,17 +76,18 @@ type GoalInput struct {
 
 // Service содержит сценарии модуля profile.
 type Service struct {
-	repo       Repository
-	db         db.Querier
-	tx         TxManager
-	clock      clock.Clock
-	anonymizer AccountAnonymizer
-	logger     *slog.Logger
+	repo         Repository
+	db           db.Querier
+	tx           TxManager
+	clock        clock.Clock
+	anonymizer   AccountAnonymizer
+	examProvider ExamProvider
+	logger       *slog.Logger
 }
 
 // NewService создаёт сервис profile.
-func NewService(repo Repository, database db.Querier, tx TxManager, clk clock.Clock, anonymizer AccountAnonymizer, logger *slog.Logger) *Service {
-	return &Service{
+func NewService(repo Repository, database db.Querier, tx TxManager, clk clock.Clock, anonymizer AccountAnonymizer, logger *slog.Logger, examProviders ...ExamProvider) *Service {
+	service := &Service{
 		repo:       repo,
 		db:         database,
 		tx:         tx,
@@ -87,6 +95,11 @@ func NewService(repo Repository, database db.Querier, tx TxManager, clk clock.Cl
 		anonymizer: anonymizer,
 		logger:     logger,
 	}
+	if len(examProviders) > 0 {
+		service.examProvider = examProviders[0]
+	}
+
+	return service
 }
 
 // GetProfile возвращает профиль пользователя.
@@ -261,6 +274,15 @@ func (s *Service) SaveGoal(ctx context.Context, userID uuid.UUID, in GoalInput) 
 	examID, err := uuid.Parse(strings.TrimSpace(in.ExamID))
 	if err != nil {
 		return nil, ErrInvalidExamID
+	}
+	if s.examProvider != nil {
+		available, err := s.examProvider.IsExamAvailable(ctx, examID)
+		if err != nil {
+			return nil, fmt.Errorf("проверить трек: %w", err)
+		}
+		if !available {
+			return nil, ErrExamUnavailable
+		}
 	}
 
 	examDate, err := time.Parse(dateLayout, strings.TrimSpace(in.ExamDate))

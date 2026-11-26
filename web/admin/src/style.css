@@ -1,0 +1,272 @@
+:root {
+  --pico-font-size: 87.5%;
+  --pico-spacing: 0.65rem;
+  --pico-form-element-spacing-vertical: 0.35rem;
+  --pico-form-element-spacing-horizontal: 0.55rem;
+  --pico-typography-spacing-vertical: 0.5rem;
+  --pico-typography-spacing-top: 0.75rem;
+}
+
+body {
+  margin: 0;
+}
+
+.admin-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.admin-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 1.5rem;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  background: var(--pico-background-color);
+}
+
+.admin-brand {
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
+
+.admin-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.admin-logout {
+  width: auto;
+  margin: 0;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+.admin-nav {
+  display: block;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+  border-right: 1px solid var(--pico-muted-border-color);
+  padding: 0.75rem;
+}
+
+.admin-nav ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-nav li {
+  margin: 0;
+}
+
+.admin-nav a {
+  display: block;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--pico-border-radius);
+  color: var(--pico-color);
+  text-decoration: none;
+}
+
+.admin-nav a:hover {
+  background: var(--pico-secondary-background);
+}
+
+.admin-nav a.router-link-active {
+  background: var(--pico-primary);
+  color: var(--pico-primary-inverse);
+}
+
+.admin-content {
+  width: 100%;
+  max-width: 1200px;
+  padding: 1rem 1.5rem 3rem;
+}
+
+.admin-content h2 {
+  font-size: 1.25rem;
+  margin: 0 0 0.75rem;
+}
+
+.admin-content h3 {
+  font-size: 1rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.admin-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem 0.75rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.admin-form input,
+.admin-form select,
+.admin-form textarea,
+.admin-form button {
+  margin-bottom: 0;
+}
+
+.admin-form button {
+  align-self: end;
+}
+
+.admin-form textarea {
+  min-height: 6rem;
+}
+
+.admin-content table {
+  font-size: 0.9rem;
+}
+
+.admin-content table th,
+.admin-content table td {
+  padding: 0.35rem 0.5rem;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.admin-actions button {
+  width: auto;
+  margin-bottom: 0;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.admin-error {
+  color: var(--pico-del-color);
+}
+
+.admin-help-button {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 100;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.admin-help-dialog {
+  max-width: 46rem;
+}
+
+.admin-help-dialog article {
+  max-height: 80vh;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.admin-help-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-help-close {
+  width: auto;
+  margin: 0;
+  padding: 0.15rem 0.5rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.admin-help-body h1 {
+  font-size: 1.2rem;
+}
+
+.admin-help-body h2 {
+  font-size: 1.05rem;
+}
+
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.editor-surface {
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0.75rem;
+  min-height: 12rem;
+}
+
+.editor-preview {
+  border: 1px dashed var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-nav {
+    position: static;
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--pico-muted-border-color);
+    padding: 0.5rem;
+  }
+
+  .admin-nav ul {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 0.25rem;
+  }
+
+  .admin-nav a {
+    white-space: nowrap;
+  }
+
+  .admin-topbar {
+    flex-wrap: wrap;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .admin-content {
+    padding: 0.75rem 0.75rem 2rem;
+  }
+
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
