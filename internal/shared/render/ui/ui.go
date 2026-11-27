@@ -2,7 +2,8 @@
 package ui
 
 import (
-	"hash/fnv"
+	"crypto/sha256"
+	"encoding/binary"
 	"strconv"
 	"strings"
 
@@ -18,6 +19,10 @@ const (
 	ToneOK      Tone = "ok"
 	ToneErr     Tone = "err"
 	ToneWarn    Tone = "warn"
+	ToneTeal    Tone = "teal"
+	ToneOlive   Tone = "olive"
+	ToneBrown   Tone = "brown"
+	ToneOchre   Tone = "ochre"
 )
 
 // ButtonVariant — визуальный вариант кнопки.
@@ -399,16 +404,16 @@ func SubjectTone(code string) Tone {
 		return ToneNeutral
 	}
 
-	hasher := fnv.New32a()
-	_, _ = hasher.Write([]byte(code))
-	palette := []Tone{ToneAccent, ToneOK, ToneWarn, ToneErr}
+	sum := sha256.Sum256([]byte(code))
+	palette := []Tone{ToneTeal, ToneOlive, ToneBrown, ToneOchre}
+	index := binary.LittleEndian.Uint32(sum[len(sum)-4:]) % uint32(len(palette))
 
-	return palette[hasher.Sum32()%uint32(len(palette))]
+	return palette[index]
 }
 
 func toneClass(prefix string, tone Tone) string {
 	switch tone {
-	case ToneAccent, ToneOK, ToneErr, ToneWarn:
+	case ToneAccent, ToneOK, ToneErr, ToneWarn, ToneTeal, ToneOlive, ToneBrown, ToneOchre:
 		return prefix + "--" + string(tone)
 	default:
 		return prefix + "--neutral"

@@ -48,6 +48,44 @@ func TestSubjectTone(t *testing.T) {
 	}
 }
 
+func TestSubjectToneUsesIdentityPalette(t *testing.T) {
+	identity := map[Tone]bool{
+		ToneTeal:  true,
+		ToneOlive: true,
+		ToneBrown: true,
+		ToneOchre: true,
+	}
+	forbidden := map[Tone]bool{
+		ToneAccent: true,
+		ToneOK:     true,
+		ToneErr:    true,
+		ToneWarn:   true,
+	}
+
+	codes := []string{"oge_math", "ege_math_profile", "ege_math_base", "ege_physics", "oge_physics"}
+	for _, code := range codes {
+		tone := SubjectTone(code)
+		if forbidden[tone] {
+			t.Fatalf("SubjectTone(%q) = %q: оттенок трека не должен совпадать с акцентом или семантикой", code, tone)
+		}
+		if !identity[tone] {
+			t.Fatalf("SubjectTone(%q) = %q: ожидался оттенок палитры идентичности", code, tone)
+		}
+	}
+}
+
+func TestSubjectToneDistinguishesMathTracks(t *testing.T) {
+	codes := []string{"oge_math", "ege_math_profile", "ege_math_base"}
+	seen := make(map[Tone]bool, len(codes))
+	for _, code := range codes {
+		seen[SubjectTone(code)] = true
+	}
+
+	if len(seen) != len(codes) {
+		t.Fatalf("треки %v должны получать разные оттенки, получено %v", codes, seen)
+	}
+}
+
 func TestButtonRendersStates(t *testing.T) {
 	html := renderComponent(t, Button(ButtonProps{
 		Label:    "Проверить",

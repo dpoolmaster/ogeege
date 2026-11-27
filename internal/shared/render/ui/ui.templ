@@ -271,7 +271,7 @@ templ HelpTip(text string) {
 templ TaskCard(props TaskCardProps) {
 	<article class="v-card v-task-card">
 		<div class="v-task-card__top">
-			@Badge(ToneAccent, "КИМ "+strconv.Itoa(props.KimNumber))
+			@Badge(ToneNeutral, "КИМ "+strconv.Itoa(props.KimNumber))
 			if props.Topic != "" {
 				@Badge(ToneNeutral, props.Topic)
 			}

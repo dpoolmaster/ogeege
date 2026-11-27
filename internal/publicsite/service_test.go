@@ -124,6 +124,14 @@ func (c *fakeContent) ListKimNumbers(_ context.Context, _ content.KimNumberFilte
 	return c.kimList, nil
 }
 
+func (c *fakeContent) GetKimNumber(_ context.Context, id uuid.UUID) (*content.KimNumber, error) {
+	if c.kim != nil && c.kim.ID == id {
+		return c.kim, nil
+	}
+
+	return nil, content.ErrNotFound
+}
+
 func (c *fakeContent) GetKimNumberByNumber(_ context.Context, _ uuid.UUID, _ int) (*content.KimNumber, error) {
 	if c.kim == nil {
 		return nil, content.ErrNotFound

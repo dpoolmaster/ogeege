@@ -104,16 +104,24 @@ type Breadcrumb struct {
 	Path  string
 }
 
+// Viewer — вошедший пользователь для шапки публичных страниц.
+type Viewer struct {
+	SignedIn bool
+	Label    string
+}
+
 // HomePage — данные главной страницы.
 type HomePage struct {
-	Brand string
-	Exams []content.Exam
-	SEO   SEOMetadata
+	Brand  string
+	Viewer Viewer
+	Exams  []content.Exam
+	SEO    SEOMetadata
 }
 
 // LandingPage — данные лендинга трека.
 type LandingPage struct {
 	Brand      string
+	Viewer     Viewer
 	Exam       content.Exam
 	Year       *content.ExamYear
 	KimNumbers []content.KimNumber
@@ -133,6 +141,8 @@ type BankFilter struct {
 // BankPage — данные страницы банка.
 type BankPage struct {
 	Brand      string
+	Viewer     Viewer
+	Exams      []content.Exam
 	Exam       *content.Exam
 	Year       *content.ExamYear
 	Tasks      []content.Task
@@ -147,6 +157,7 @@ type BankPage struct {
 // TaskPage — данные карточки задания.
 type TaskPage struct {
 	Brand         string
+	Viewer        Viewer
 	Task          content.Task
 	StatementHTML string
 	Topic         *content.Topic
@@ -165,11 +176,12 @@ type CheckResult struct {
 
 // DemoStart — данные запуска демо-диагностики.
 type DemoStart struct {
-	Brand string
-	Exam  content.Exam
-	Year  content.ExamYear
-	Tasks []content.Task
-	SEO   SEOMetadata
+	Brand  string
+	Viewer Viewer
+	Exam   content.Exam
+	Year   content.ExamYear
+	Tasks  []content.Task
+	SEO    SEOMetadata
 }
 
 // TopicResult — разбивка результата демо по теме.
@@ -189,6 +201,7 @@ type DemoResult struct {
 // ArticleView — данные страницы статьи.
 type ArticleView struct {
 	Brand       string
+	Viewer      Viewer
 	Article     Article
 	ContentHTML string
 	SEO         SEOMetadata
@@ -257,6 +270,12 @@ func (s *Service) Landing(ctx context.Context, code string) (*LandingPage, error
 func (s *Service) Bank(ctx context.Context, filter BankFilter) (*BankPage, error) {
 	limit := normalizeLimit(filter.Limit)
 	page := &BankPage{Filter: filter}
+
+	exams, err := s.content.ListPublishedExams(ctx)
+	if err != nil {
+		return nil, err
+	}
+	page.Exams = exams
 
 	taskFilter := content.TaskFilter{
 		Cursor:               filter.Cursor,
@@ -344,8 +363,10 @@ func (s *Service) resolveTaskRefs(ctx context.Context, page *BankPage) error {
 		knownKim[kim.ID] = true
 	}
 	knownTopic := make(map[uuid.UUID]bool, len(page.Topics))
+	knownTopicTitle := make(map[string]bool, len(page.Topics))
 	for _, topic := range page.Topics {
 		knownTopic[topic.ID] = true
+		knownTopicTitle[topic.Title] = true
 	}
 
 	for _, task := range page.Tasks {
@@ -367,7 +388,8 @@ func (s *Service) resolveTaskRefs(ctx context.Context, page *BankPage) error {
 				if !errors.Is(err, content.ErrNotFound) {
 					return err
 				}
-			} else {
+			} else if !knownTopicTitle[topic.Title] {
+				knownTopicTitle[topic.Title] = true
 				page.Topics = append(page.Topics, *topic)
 			}
 		}

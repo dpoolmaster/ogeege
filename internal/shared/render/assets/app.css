@@ -27,16 +27,25 @@
 	--v-surface: #ffffff;
 	--v-ink: #1b1b1f;
 	--v-ink-2: #4b4b55;
-	--v-muted: #7c7c88;
+	--v-muted: #62626b;
 	--v-line: #e6e2d9;
-	--v-accent: #2f5bea;
-	--v-accent-soft: #e9eefc;
+	--v-accent: #8a2f5e;
+	--v-accent-soft: #ece1e1;
+	--v-accent-strong: #73264e;
 	--v-ok: #1f8a5b;
 	--v-ok-soft: #e7f4ed;
 	--v-err: #c4453c;
 	--v-err-soft: #fbecea;
 	--v-warn: #b7791f;
 	--v-warn-soft: #fdf2e0;
+	--v-teal: #2f5f5a;
+	--v-teal-soft: #e3e6e1;
+	--v-olive: #5c6b2f;
+	--v-olive-soft: #e8e7dd;
+	--v-brown: #7a4b2f;
+	--v-brown-soft: #eae4dd;
+	--v-ochre: #7f5b11;
+	--v-ochre-soft: #ebe6da;
 
 	--v-r-field: 10px;
 	--v-r-card: 14px;
@@ -205,13 +214,13 @@ table th {
 	list-style: none;
 }
 
-.v-site-header nav a {
+.v-site-header nav a:not(.v-btn) {
 	color: var(--v-ink-2);
 	text-decoration: none;
 	font-size: var(--v-fs-15);
 }
 
-.v-site-header nav a:hover {
+.v-site-header nav a:not(.v-btn):hover {
 	color: var(--v-accent);
 }
 
@@ -384,9 +393,8 @@ table th {
 }
 
 .v-btn--primary:hover {
-	background: #2448bd;
-	border-color: #2448bd;
-	color: #fff;
+	background: var(--v-accent-strong);
+	border-color: var(--v-accent-strong);
 }
 
 .v-btn--secondary {
@@ -516,6 +524,26 @@ table th {
 	color: var(--v-warn);
 }
 
+.v-badge--teal {
+	background: var(--v-teal-soft);
+	color: var(--v-teal);
+}
+
+.v-badge--olive {
+	background: var(--v-olive-soft);
+	color: var(--v-olive);
+}
+
+.v-badge--brown {
+	background: var(--v-brown-soft);
+	color: var(--v-brown);
+}
+
+.v-badge--ochre {
+	background: var(--v-ochre-soft);
+	color: var(--v-ochre);
+}
+
 .v-card {
 	background: var(--v-surface);
 	border: 1px solid var(--v-line);
@@ -563,6 +591,22 @@ table th {
 
 .v-track-card--err {
 	border-top-color: var(--v-err);
+}
+
+.v-track-card--teal {
+	border-top-color: var(--v-teal);
+}
+
+.v-track-card--olive {
+	border-top-color: var(--v-olive);
+}
+
+.v-track-card--brown {
+	border-top-color: var(--v-brown);
+}
+
+.v-track-card--ochre {
+	border-top-color: var(--v-ochre);
 }
 
 .v-eyebrow {
@@ -957,6 +1001,26 @@ table th {
 	color: var(--v-err);
 }
 
+.v-heatmap__cell--teal {
+	background: var(--v-teal-soft);
+	color: var(--v-teal);
+}
+
+.v-heatmap__cell--olive {
+	background: var(--v-olive-soft);
+	color: var(--v-olive);
+}
+
+.v-heatmap__cell--brown {
+	background: var(--v-brown-soft);
+	color: var(--v-brown);
+}
+
+.v-heatmap__cell--ochre {
+	background: var(--v-ochre-soft);
+	color: var(--v-ochre);
+}
+
 .v-task-layout {
 	display: grid;
 	grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
@@ -1269,7 +1333,7 @@ table th {
 
 .v-cta p {
 	margin: 0;
-	color: rgba(255, 255, 255, 0.85);
+	color: #fff;
 }
 
 .v-cta .v-btn--secondary {

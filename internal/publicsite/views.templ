@@ -252,7 +252,15 @@ templ BankView(page *BankPage) {
 		</hgroup>
 		<form method="get" action="/bank" hx-get="/hx/bank" hx-target="#bank-results" hx-push-url="true" class="v-form v-bank-filter">
 			<div class="v-grid-3">
-				@ui.Field(ui.FieldProps{Label: "Код трека", Name: "exam", Value: page.Filter.ExamCode, Placeholder: "oge_math", Hint: "Например, oge_math"})
+				<div class="v-field">
+					<label for="field-exam">Трек</label>
+					<select id="field-exam" name="exam">
+						<option value="">Все треки</option>
+						for _, exam := range page.Exams {
+							<option value={ exam.Code } selected?={ exam.Code == page.Filter.ExamCode }>{ exam.Title }</option>
+						}
+					</select>
+				</div>
 				@ui.Field(ui.FieldProps{Label: "Номер КИМ", Name: "kim", Type: "number", Value: intString(page.Filter.KimNumber)})
 				<div class="v-field">
 					<label for="field-topic">Тема</label>
@@ -311,7 +319,7 @@ templ TaskView(page *TaskPage) {
 		<div class="v-task-layout">
 			<article class="v-task-statement">
 				<div class="v-task-statement__meta">
-					@ui.Badge(ui.ToneAccent, "Задание банка")
+					@ui.Badge(ui.ToneNeutral, "Задание банка")
 					if page.Topic != nil {
 						@ui.Badge(ui.ToneNeutral, page.Topic.Title)
 					}
