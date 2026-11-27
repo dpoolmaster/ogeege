@@ -30,12 +30,12 @@ func TestComponent(t *testing.T) {
 
 func TestLayoutRendersWithoutUserData(t *testing.T) {
 	var buf bytes.Buffer
-	if err := Component(context.Background(), &buf, Layout("Вход")); err != nil {
+	if err := Component(context.Background(), &buf, Layout(Chrome{Brand: "Верно"}, "Вход")); err != nil {
 		t.Fatalf("неожиданная ошибка: %v", err)
 	}
 
 	html := buf.String()
-	for _, part := range []string{"<!doctype html>", `lang="ru"`, "<title>Вход</title>", "pico.min.css", stylesPath, `class="container auth-page"`} {
+	for _, part := range []string{"<!doctype html>", `lang="ru"`, "<title>Вход — Верно</title>", "pico.min.css", stylesPath, `class="container auth-page"`, faviconPath, FontsPath("golos-text-cyrillic.woff2")} {
 		if !strings.Contains(html, part) {
 			t.Fatalf("страница не содержит %q: %s", part, html)
 		}

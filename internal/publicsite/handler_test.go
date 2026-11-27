@@ -40,7 +40,7 @@ func newFixture(repo Repository, provider ContentProvider, recipients RecipientP
 	csrf := httpserver.NewCSRF("secret", false, nil)
 	signer := NewDemoSigner("secret", DemoTTL, clk)
 	cache := NewCache(time.Minute, 100)
-	handler := NewHandler(service, csrf, signer, cache, testLogger(), false, "https://example.ru")
+	handler := NewHandler(service, csrf, signer, cache, testLogger(), false, "https://example.ru", "Верно")
 
 	router := gin.New()
 	router.Use(csrf.Middleware())
@@ -303,7 +303,7 @@ func TestHandlerLeadRateLimit(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	service := newTestService(&fakeRepo{}, &fakeContent{}, fakeRecipients{}, &fakeNotifier{})
 	csrf := httpserver.NewCSRF("secret", false, nil)
-	handler := NewHandler(service, csrf, NewDemoSigner("secret", DemoTTL, &testClock{now: time.Now()}), NewCache(time.Minute, 10), testLogger(), false, "https://example.ru")
+	handler := NewHandler(service, csrf, NewDemoSigner("secret", DemoTTL, &testClock{now: time.Now()}), NewCache(time.Minute, 10), testLogger(), false, "https://example.ru", "Верно")
 	router := gin.New()
 	router.Use(csrf.Middleware())
 	handler.Register(router, httpserver.NewRateLimiter(1, time.Minute))

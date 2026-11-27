@@ -14,7 +14,7 @@ import (
 
 func TestWriteErrorMapping(t *testing.T) {
 	env := newTestEnv()
-	handler := NewHandler(env.service, nil, nil, discardLogger())
+	handler := NewHandler(env.service, nil, nil, discardLogger(), "")
 
 	tests := []struct {
 		name string
@@ -50,7 +50,7 @@ func TestWriteErrorMapping(t *testing.T) {
 
 func TestHandlerBindErrors(t *testing.T) {
 	env := newTestEnv()
-	handler := NewHandler(env.service, nil, nil, discardLogger())
+	handler := NewHandler(env.service, nil, nil, discardLogger(), "")
 	user := &User{ID: uuid.Must(uuid.NewV7()), Role: RoleStudent, Status: StatusActive}
 	session := &Session{ID: uuid.Must(uuid.NewV7()), UserID: user.ID}
 
@@ -162,7 +162,7 @@ func TestLoginHandlerTooManyAttempts(t *testing.T) {
 
 func TestLogoutWithoutSession(t *testing.T) {
 	env := newTestEnv()
-	handler := NewHandler(env.service, nil, nil, discardLogger())
+	handler := NewHandler(env.service, nil, nil, discardLogger(), "")
 
 	c, rec := newTestContext(http.MethodPost, "/api/auth/logout", "{}")
 	handler.Logout(c)
@@ -174,7 +174,7 @@ func TestLogoutWithoutSession(t *testing.T) {
 
 func TestChangePasswordWithoutSession(t *testing.T) {
 	env := newTestEnv()
-	handler := NewHandler(env.service, nil, nil, discardLogger())
+	handler := NewHandler(env.service, nil, nil, discardLogger(), "")
 
 	c, rec := newTestContext(http.MethodPost, "/api/auth/password/change", `{"current_password":"a","new_password":"b"}`)
 	handler.ChangePassword(c)
@@ -269,7 +269,7 @@ func (failingConsentRecorder) RecordRegistrationConsents(context.Context, uuid.U
 
 func TestRegisterWithConsentRecorderFailure(t *testing.T) {
 	env := newTestEnv()
-	handler := NewHandler(env.service, nil, failingConsentRecorder{}, discardLogger())
+	handler := NewHandler(env.service, nil, failingConsentRecorder{}, discardLogger(), "")
 
 	c, rec := newTestContext(http.MethodPost, "/api/auth/register", `{
 		"email": "student@example.ru",
@@ -287,7 +287,7 @@ func TestRegisterWithConsentRecorderFailure(t *testing.T) {
 func TestLogoutHandlerServiceError(t *testing.T) {
 	env := newTestEnv()
 	env.repo.revokeSessionErr = errors.New("БД недоступна")
-	handler := NewHandler(env.service, nil, nil, discardLogger())
+	handler := NewHandler(env.service, nil, nil, discardLogger(), "")
 
 	user := &User{ID: uuid.Must(uuid.NewV7()), Role: RoleStudent}
 	session := &Session{ID: uuid.Must(uuid.NewV7()), UserID: user.ID}

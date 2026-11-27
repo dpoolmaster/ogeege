@@ -23,15 +23,17 @@ type Handler struct {
 	csrf     *httpserver.CSRF
 	consents ConsentRecorder
 	logger   *slog.Logger
+	brand    string
 }
 
 // NewHandler создаёт HTTP-обработчик auth.
-func NewHandler(service *Service, csrf *httpserver.CSRF, consents ConsentRecorder, logger *slog.Logger) *Handler {
+func NewHandler(service *Service, csrf *httpserver.CSRF, consents ConsentRecorder, logger *slog.Logger, brand string) *Handler {
 	return &Handler{
 		service:  service,
 		csrf:     csrf,
 		consents: consents,
 		logger:   logger,
+		brand:    brand,
 	}
 }
 

@@ -104,7 +104,7 @@ func run() error {
 	helpHandler := help.NewHandler(helpService)
 
 	csrf := httpserver.NewCSRF(cfg.App.SessionSecret, cfg.App.Env == "production", auth.SessionTokenFromRequest)
-	authHandler := auth.NewHandler(authService, csrf, profileService, logger)
+	authHandler := auth.NewHandler(authService, csrf, profileService, logger, cfg.App.BrandName)
 	profileHandler := profile.NewHandler(profileService, logger)
 
 	publicRepo := publicsite.NewPgRepository()
@@ -119,6 +119,7 @@ func run() error {
 		logger,
 		cfg.App.Env == "production",
 		cfg.App.BaseURL,
+		cfg.App.BrandName,
 	)
 
 	loginLimiter := httpserver.NewRateLimiter(cfg.RateLimit.LoginPerMin, time.Minute)
@@ -196,6 +197,8 @@ func registerRoutes(
 	api := router.Group("/api", apiLimiter.Middleware(httpserver.ClientIPKey))
 
 	router.GET(render.StylesPath(), render.StylesHandler())
+	router.GET(render.FaviconPath(), render.FaviconHandler())
+	router.GET("/static/fonts/:file", render.FontsHandler())
 
 	router.GET("/account", auth.AuthPage(authService), authHandler.ShowAccount)
 	router.GET("/logout", auth.AuthPage(authService), authHandler.ShowLogout)

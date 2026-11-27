@@ -1,14 +1,18 @@
 package publicsite
 
-import "oge-ege/internal/content"
+import (
+	"oge-ege/internal/content"
+	"oge-ege/internal/shared/render"
+	"oge-ege/internal/shared/render/ui"
+)
 
-templ pageLayout(seo SEOMetadata, crumbs []Breadcrumb) {
+templ pageLayout(seo SEOMetadata, crumbs []Breadcrumb, brand string) {
 	<!DOCTYPE html>
 	<html lang="ru">
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<title>{ seo.Title }</title>
+			<title>{ render.DocumentTitle(seo.Title, brandName(brand)) }</title>
 			if seo.Description != "" {
 				<meta name="description" content={ seo.Description }/>
 			}
@@ -30,68 +34,140 @@ templ pageLayout(seo SEOMetadata, crumbs []Breadcrumb) {
 				<meta property="og:image" content={ seo.OGImage }/>
 			}
 			<meta property="og:type" content="website"/>
+			<link rel="icon" href={ render.FaviconPath() } type="image/svg+xml"/>
+			<link rel="preload" href={ render.FontsPath("golos-text-cyrillic.woff2") } as="font" type="font/woff2" crossorigin/>
 			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"/>
 			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"/>
-			<link rel="stylesheet" href="/static/app.css"/>
+			<link rel="stylesheet" href={ render.StylesPath() }/>
 			<script defer src="/static/public/htmx.min.js"></script>
 			<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 			<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 			<script defer src="/static/public/public.js"></script>
 		</head>
-		<body>
-			<header class="container">
-				<nav>
-					<ul>
-						<li><a href="/"><strong>ОГЭ и ЕГЭ</strong></a></li>
-					</ul>
-					<ul>
-						<li><a href="/bank">Банк заданий</a></li>
-						<li><a href="/diagnostics/demo">Демо-диагностика</a></li>
-						<li><a href="/articles">Статьи</a></li>
-						<li><a href="/login">Войти</a></li>
-					</ul>
-				</nav>
-			</header>
-			<main class="container">
-				if len(crumbs) > 0 {
-					<nav aria-label="Хлебные крошки">
-						<ol>
-							for i, crumb := range crumbs {
-								<li>
-									if i == len(crumbs)-1 {
-										<span>{ crumb.Title }</span>
-									} else {
-										<a href={ crumb.Path }>{ crumb.Title }</a>
-									}
-								</li>
-							}
-						</ol>
+		<body class="v-site">
+			<a class="v-skip-link" href="#main-content">Перейти к содержимому</a>
+			<header class="v-site-header">
+				<div class="container v-site-header__inner">
+					<a class="v-brand" href="/">{ brandName(brand) }</a>
+					<nav aria-label="Основная навигация">
+						<ul>
+							<li><a href="/#tracks">Треки</a></li>
+							<li><a href="/bank">Банк заданий</a></li>
+							<li><a href="/diagnostics/demo">Демо-диагностика</a></li>
+							<li><a href="/articles">Статьи</a></li>
+							<li><a href="/login">Войти</a></li>
+							<li><a class="v-btn v-btn--primary v-btn--sm" href="/register">Начать</a></li>
+						</ul>
 					</nav>
+				</div>
+			</header>
+			<main id="main-content" class="container v-main">
+				if len(crumbs) > 0 {
+					@ui.Breadcrumbs(uiCrumbs(crumbs))
 				}
 				{ children... }
 			</main>
-			<footer class="container">
-				<small>Подготовка к ОГЭ и ЕГЭ. Открытый банк заданий и демо-диагностика.</small>
+			<footer class="v-site-footer">
+				<div class="container v-site-footer__inner">
+					<div>
+						<p class="v-site-footer__brand">{ brandName(brand) }</p>
+						<small>Открытый банк заданий, демо-диагностика и разборы.</small>
+					</div>
+					<nav aria-label="Навигация в подвале">
+						<ul>
+							<li><a href="/#tracks">Треки</a></li>
+							<li><a href="/bank">Банк заданий</a></li>
+							<li><a href="/diagnostics/demo">Демо-диагностика</a></li>
+							<li><a href="/articles">Статьи</a></li>
+						</ul>
+					</nav>
+				</div>
 			</footer>
 		</body>
 	</html>
 }
 
 templ HomePageView(page *HomePage) {
-	@pageLayout(page.SEO, nil) {
-		<hgroup>
-			<h1>Подготовка к ОГЭ и ЕГЭ</h1>
-			<p>Открытый банк заданий, демо-диагностика и разборы без регистрации.</p>
-		</hgroup>
-		<section>
-			<h2>Учебные треки</h2>
-			<ul>
-				for _, exam := range page.Exams {
-					<li><a href={ "/tracks/" + exam.Code }>{ exam.Title }</a></li>
+	@pageLayout(page.SEO, nil, page.Brand) {
+		<section class="v-hero">
+			<div class="v-hero__text">
+				<h1>Подготовка к экзаменам</h1>
+				<p class="v-lead">Открытый банк заданий, демо-диагностика и разборы без регистрации.</p>
+				<div class="v-actions">
+					<a class="v-btn v-btn--primary v-btn--md" href="/bank">Перейти в банк заданий</a>
+					<a class="v-btn v-btn--secondary v-btn--md" href="/diagnostics/demo">Пройти демо-диагностику</a>
+				</div>
+			</div>
+			<div class="v-hero__aside">
+				@ui.Card(ui.CardProps{Title: "С чего начать", Meta: "Бесплатно и без регистрации"}) {
+					<p>Пройдите короткую демо-диагностику и посмотрите, какие темы стоит повторить первыми.</p>
+					<a class="v-btn v-btn--secondary v-btn--sm" href="/diagnostics/demo">Открыть демо</a>
 				}
-			</ul>
+			</div>
 		</section>
-		<p><a role="button" href="/bank">Перейти в банк заданий</a></p>
+		<section id="tracks" class="v-section">
+			<div class="v-section__head">
+				<h2>Учебные треки</h2>
+				<a href="/bank">Открыть банк заданий</a>
+			</div>
+			<div class="v-card-grid">
+				for _, exam := range page.Exams {
+					<article class={ "v-card v-track-card v-track-card--" + string(ui.SubjectTone(exam.Code)) }>
+						<h3><a href={ "/tracks/" + exam.Code }>{ exam.Title }</a></h3>
+						<p>Структура экзамена, темы и демо-диагностика.</p>
+						<a class="v-btn v-btn--secondary v-btn--sm" href={ "/tracks/" + exam.Code }>Открыть трек</a>
+					</article>
+				}
+			</div>
+		</section>
+		<section class="v-section">
+			<div class="v-section__head">
+				<h2>Как это работает</h2>
+			</div>
+			<ol class="v-steps">
+				<li class="v-step">
+					<span class="v-step__num">1</span>
+					<h3>Пройдите демо-диагностику</h3>
+					<p>Короткий набор заданий покажет текущий уровень без регистрации.</p>
+				</li>
+				<li class="v-step">
+					<span class="v-step__num">2</span>
+					<h3>Получите карту пробелов</h3>
+					<p>Разбивка по темам и номерам КИМ покажет, что повторять первым.</p>
+				</li>
+				<li class="v-step">
+					<span class="v-step__num">3</span>
+					<h3>Занимайтесь по плану</h3>
+					<p>Недельный план пересчитывается по результатам практики и пробников.</p>
+				</li>
+			</ol>
+		</section>
+		<section class="v-section">
+			<div class="v-section__head">
+				<h2>Частые вопросы</h2>
+			</div>
+			<div class="v-faq">
+				<details>
+					<summary>Нужна ли регистрация, чтобы начать?</summary>
+					<p>Нет. Банк заданий, демо-диагностика и статьи доступны без аккаунта.</p>
+				</details>
+				<details>
+					<summary>Как проверяются задания?</summary>
+					<p>Задания части 1 проверяются автоматически по эталонному ответу, развёрнутые ответы — методистом.</p>
+				</details>
+				<details>
+					<summary>Что даёт аккаунт?</summary>
+					<p>Персональный план, карту пробелов, статистику прогресса и прогноз балла.</p>
+				</details>
+			</div>
+		</section>
+		<section class="v-cta">
+			<div>
+				<h2>Начните с бесплатной диагностики</h2>
+				<p>Пять–семь заданий, итог по темам и рекомендации — без регистрации.</p>
+			</div>
+			<a class="v-btn v-btn--secondary v-btn--md" href="/diagnostics/demo">Пройти демо</a>
+		</section>
 	}
 }
 
@@ -99,54 +175,68 @@ templ LandingView(page *LandingPage) {
 	@pageLayout(page.SEO, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: page.Exam.Title, Path: "/tracks/" + page.Exam.Code},
-	}) {
-		<hgroup>
-			<h1>{ page.Exam.Title }</h1>
-			<p>Структура экзамена, темы и демо-диагностика.</p>
-		</hgroup>
-		<p>
-			<a role="button" href={ "/diagnostics/demo?exam=" + page.Exam.Code }>Пройти демо-диагностику</a>
-			<a role="button" class="secondary" href={ "/bank?exam=" + page.Exam.Code }>Открыть банк заданий</a>
-		</p>
-		if page.Year != nil {
-			<section>
-				<h2>Структура экзамена</h2>
-				<p>Учебный год { page.Year.Year }, длительность { page.Year.DurationMinutes } минут.</p>
-				<table>
-					<thead>
-						<tr><th>№</th><th>Часть</th><th>Тип ответа</th><th>Баллы</th></tr>
-					</thead>
-					<tbody>
-						for _, kim := range page.KimNumbers {
-							<tr>
-								<td>{ kim.Number }</td>
-								<td>{ kim.Part }</td>
-								<td>{ string(kim.AnswerType) }</td>
-								<td>{ kim.MaxPrimaryScore }</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</section>
-		} else {
-			<section>
-				<h2>Структура экзамена</h2>
-				<p>Опубликованный учебный год пока не добавлен. Оставьте заявку, и мы сообщим о старте подготовки.</p>
-			</section>
-		}
-		if len(page.Topics) > 0 {
-			<section>
-				<h2>Темы</h2>
-				<ul>
-					for _, topic := range page.Topics {
-						<li>{ topic.Title }</li>
+	}, page.Brand) {
+		<section class="v-hero">
+			<div class="v-hero__text">
+				<p class="v-eyebrow">Учебный трек</p>
+				<h1>{ page.Exam.Title }</h1>
+				<p class="v-lead">Структура экзамена, темы и демо-диагностика.</p>
+				<div class="v-actions">
+					<a class="v-btn v-btn--primary v-btn--md" href={ "/diagnostics/demo?exam=" + page.Exam.Code }>Пройти демо-диагностику</a>
+					<a class="v-btn v-btn--secondary v-btn--md" href={ "/bank?exam=" + page.Exam.Code }>Открыть банк заданий</a>
+				</div>
+			</div>
+			<div class="v-hero__aside">
+				@ui.Card(ui.CardProps{Title: "Факты экзамена", Meta: "Актуальный учебный год"}) {
+					if page.Year != nil {
+						<ul class="v-facts">
+							for _, fact := range examFacts(page) {
+								<li><strong>{ fact.Value }</strong><span>{ fact.Label }</span></li>
+							}
+						</ul>
+					} else {
+						<p>Опубликованный учебный год пока не добавлен.</p>
 					}
-				</ul>
+				}
+			</div>
+		</section>
+		<section class="v-section">
+			<div class="v-two-col">
+				<div>
+					<h2>Структура экзамена</h2>
+					if page.Year != nil {
+						<p>Учебный год { page.Year.Year }, длительность { page.Year.DurationMinutes } минут.</p>
+						@ui.Table(ui.TableProps{
+							Head: []string{"№", "Часть", "Тип ответа", "Баллы"},
+							Rows: kimRows(page.KimNumbers),
+							Caption: "Структура экзамена",
+						})
+					} else {
+						<p>Опубликованный учебный год пока не добавлен. Оставьте заявку, и мы сообщим о старте подготовки.</p>
+					}
+				</div>
+				<div>
+					<h2>Записаться на подготовку</h2>
+					@leadForm("/leads", page.Exam.Code, nil, false)
+				</div>
+			</div>
+		</section>
+		if len(page.Topics) > 0 {
+			<section class="v-section">
+				<h2>Темы</h2>
+				<div class="v-tag-list">
+					for _, topic := range page.Topics {
+						@ui.Badge(ui.ToneNeutral, topic.Title)
+					}
+				</div>
 			</section>
 		}
-		<section>
-			<h2>Записаться на подготовку</h2>
-			@leadForm("/leads", page.Exam.Code, nil, false)
+		<section class="v-cta">
+			<div>
+				<h2>Проверьте себя на демо</h2>
+				<p>Короткий набор заданий и итог с разбивкой по темам — без регистрации.</p>
+			</div>
+			<a class="v-btn v-btn--secondary v-btn--md" href={ "/diagnostics/demo?exam=" + page.Exam.Code }>Начать демо</a>
 		</section>
 	}
 }
@@ -155,55 +245,59 @@ templ BankView(page *BankPage) {
 	@pageLayout(page.SEO, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Банк заданий", Path: "/bank"},
-	}) {
+	}, page.Brand) {
 		<hgroup>
 			<h1>Открытый банк заданий</h1>
 			<p>Только опубликованные задания с автоматической проверкой.</p>
 		</hgroup>
-		<form method="get" action="/bank" hx-get="/hx/bank" hx-target="#bank-results" hx-push-url="true">
-			<div class="grid">
-				<label>
-					Код трека
-					<input type="text" name="exam" value={ page.Filter.ExamCode } placeholder="oge_math"/>
-				</label>
-				<label>
-					Номер КИМ
-					<input type="number" name="kim" value={ page.Filter.KimNumber } min="1"/>
-				</label>
-				<label>
-					Тема
-					<select name="topic">
+		<form method="get" action="/bank" hx-get="/hx/bank" hx-target="#bank-results" hx-push-url="true" class="v-form v-bank-filter">
+			<div class="v-grid-3">
+				@ui.Field(ui.FieldProps{Label: "Код трека", Name: "exam", Value: page.Filter.ExamCode, Placeholder: "oge_math", Hint: "Например, oge_math"})
+				@ui.Field(ui.FieldProps{Label: "Номер КИМ", Name: "kim", Type: "number", Value: intString(page.Filter.KimNumber)})
+				<div class="v-field">
+					<label for="field-topic">Тема</label>
+					<select id="field-topic" name="topic">
 						<option value="">Все темы</option>
 						for _, topic := range page.Topics {
-							<option value={ topic.ID.String() }>{ topic.Title }</option>
+							<option value={ topic.ID.String() } selected?={ page.Filter.TopicID != nil && *page.Filter.TopicID == topic.ID }>{ topic.Title }</option>
 						}
 					</select>
-				</label>
+				</div>
 			</div>
-			<button type="submit">Показать задания</button>
+			@ui.Button(ui.ButtonProps{Label: "Показать задания", Type: "submit", Variant: ui.ButtonPrimary})
 		</form>
-		<div id="bank-results">
-			@BankResultsView(page)
+		<div class="v-bank-layout">
+			<div id="bank-results">
+				@BankResultsView(page)
+			</div>
+			<aside class="v-bank-aside">
+				<h2 class="v-bank-aside__title">Фильтры</h2>
+				<p>Выбранные фильтры сохраняются в адресе — ссылкой можно поделиться.</p>
+				@ui.Button(ui.ButtonProps{Label: "Сбросить фильтры", Href: "/bank", Variant: ui.ButtonGhost, Size: ui.ButtonSmall})
+			</aside>
 		</div>
 	}
 }
 
 templ BankResultsView(page *BankPage) {
 	if len(page.Tasks) == 0 {
-		<article>Подходящих заданий пока нет. Попробуйте изменить фильтры или выберите другой трек.</article>
+		@ui.EmptyState(ui.EmptyStateProps{
+			Title: "Подходящих заданий пока нет",
+			Text: "Попробуйте изменить фильтры или выберите другой трек.",
+			ActionLabel: "Сбросить фильтры",
+			ActionHref: "/bank",
+		})
 	} else {
-		<ul>
+		<p class="v-result-count">Найдено: { intString(len(page.Tasks)) }</p>
+		<div class="v-card-grid">
 			for _, task := range page.Tasks {
-				<li>
-					<a href={ "/bank/" + task.ID.String() }>Задание</a>
-					<p>{ task.StatementMD }</p>
-				</li>
+				@ui.TaskCard(page.taskCard(task))
 			}
-		</ul>
+		</div>
 	}
 	if page.HasNext {
 		<p>
-			<a role="button" href={ "/bank?exam=" + page.Filter.ExamCode + "&kim=" + intString(page.Filter.KimNumber) + "&cursor=" + page.NextCursor.String() }>Следующая страница</a>
+			<a class="v-btn v-btn--secondary v-btn--md" href={ page.nextURL() }>Следующая страница</a>
 		</p>
 	}
 }
@@ -213,46 +307,41 @@ templ TaskView(page *TaskPage) {
 		{Title: "Главная", Path: "/"},
 		{Title: "Банк заданий", Path: "/bank"},
 		{Title: "Задание", Path: "/bank/" + page.Task.ID.String()},
-	}) {
-		<article>
-			<h1>Задание</h1>
-			@templ.Raw(page.StatementHTML)
-			if len(page.Attachments) > 0 {
-				for _, attachment := range page.Attachments {
-					<figure>
-						<img src={ attachment.URL } alt={ attachment.Alt }/>
-					</figure>
+	}, page.Brand) {
+		<div class="v-task-layout">
+			<article class="v-task-statement">
+				<div class="v-task-statement__meta">
+					@ui.Badge(ui.ToneAccent, "Задание банка")
+					if page.Topic != nil {
+						@ui.Badge(ui.ToneNeutral, page.Topic.Title)
+					}
+				</div>
+				<h1>Задание</h1>
+				@templ.Raw(page.StatementHTML)
+				if len(page.Attachments) > 0 {
+					for _, attachment := range page.Attachments {
+						<figure>
+							<img src={ attachment.URL } alt={ attachment.Alt }/>
+						</figure>
+					}
 				}
-			}
-			if page.Topic != nil {
-				<p><small>Тема: { page.Topic.Title }</small></p>
-			}
-		</article>
-		<form method="post" action={ "/bank/" + page.Task.ID.String() + "/check" }>
-			<input type="hidden" name="csrf_token" value="__CSRF__"/>
-			<label>
-				Ваш ответ
-				<input type="text" name="answer" autocomplete="off" required/>
-			</label>
-			<button type="submit">Проверить</button>
-		</form>
-		if page.Result != nil {
-			@CheckResultView(page.Result)
-		}
-	}
-}
-
-templ CheckResultView(result *CheckResult) {
-	if result.Correct {
-		<article role="status">
-			<strong>Верно</strong>
-			<p>{ result.Explanation }</p>
-		</article>
-	} else {
-		<article role="alert">
-			<strong>Неверно</strong>
-			<p>{ result.Explanation }</p>
-		</article>
+			</article>
+			<aside class="v-answer-panel">
+				<form method="post" action={ "/bank/" + page.Task.ID.String() + "/check" } class="v-form">
+					<input type="hidden" name="csrf_token" value="__CSRF__"/>
+					@ui.Field(ui.FieldProps{Label: "Ваш ответ", Name: "answer", Autocomplete: "off", Required: true})
+					@ui.Button(ui.ButtonProps{Label: "Проверить", Type: "submit", Variant: ui.ButtonPrimary})
+				</form>
+				if page.Result != nil {
+					@ui.ResultPanel(ui.ResultPanelProps{
+						Correct: page.Result.Correct,
+						Text: page.Result.Explanation,
+						NextHref: "/bank",
+						NextLabel: "К банку заданий",
+					})
+				}
+			</aside>
+		</div>
 	}
 }
 
@@ -260,16 +349,19 @@ templ DemoChoiceView(page *HomePage) {
 	@pageLayout(page.SEO, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
-	}) {
+	}, page.Brand) {
 		<hgroup>
 			<h1>Демо-диагностика</h1>
 			<p>Выберите трек, чтобы получить 5–7 заданий и увидеть результат без регистрации.</p>
 		</hgroup>
-		<ul>
+		<div class="v-card-grid">
 			for _, exam := range page.Exams {
-				<li><a href={ "/diagnostics/demo?exam=" + exam.Code }>{ exam.Title }</a></li>
+				<article class={ "v-card v-track-card v-track-card--" + string(ui.SubjectTone(exam.Code)) }>
+					<h3><a href={ "/diagnostics/demo?exam=" + exam.Code }>{ exam.Title }</a></h3>
+					<p>Короткий набор заданий с итогом по темам.</p>
+				</article>
 			}
-		</ul>
+		</div>
 	}
 }
 
@@ -278,30 +370,30 @@ templ DemoView(start *DemoStart, token string) {
 		{Title: "Главная", Path: "/"},
 		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
 		{Title: start.Exam.Title, Path: "/diagnostics/demo?exam=" + start.Exam.Code},
-	}) {
+	}, start.Brand) {
 		<hgroup>
 			<h1>Демо-диагностика: { start.Exam.Title }</h1>
 			<p>Ответьте на задания и получите итог с разбивкой по темам.</p>
 		</hgroup>
-		<form method="post" action="/diagnostics/demo/check">
+		<div class="v-demo-progress">
+			@ui.Progress(ui.ProgressProps{Value: 0, Max: len(start.Tasks), Label: "Заполнено"})
+		</div>
+		<form method="post" action="/diagnostics/demo/check" class="v-form v-demo-form" data-demo-form>
 			<input type="hidden" name="csrf_token" value="__CSRF__"/>
 			<input type="hidden" name="demo_token" value={ token }/>
 			for i, task := range start.Tasks {
-				<article>
+				<article class="v-card v-demo-task" data-demo-task>
 					<h2>Задание { i + 1 }</h2>
 					<p>{ task.StatementMD }</p>
-					<label>
-						Ответ
-						<input type="text" name={ "answer_" + task.ID.String() } autocomplete="off"/>
-					</label>
+					@ui.Field(ui.FieldProps{Label: "Ответ", Name: "answer_" + task.ID.String(), Autocomplete: "off"})
 				</article>
 			}
-			<button type="submit">Завершить диагностику</button>
+			@ui.Button(ui.ButtonProps{Label: "Завершить диагностику", Type: "submit", Variant: ui.ButtonPrimary})
 		</form>
 	}
 }
 
-templ DemoResultView(result *DemoResult) {
+templ DemoResultView(result *DemoResult, brand string) {
 	@pageLayout(SEOMetadata{
 		Title:       "Результат демо-диагностики",
 		Description: "Итог демо-диагностики и разбивка по темам.",
@@ -311,60 +403,63 @@ templ DemoResultView(result *DemoResult) {
 		{Title: "Главная", Path: "/"},
 		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
 		{Title: "Результат", Path: "/diagnostics/demo"},
-	}) {
+	}, brand) {
 		<hgroup>
 			<h1>Результат демо-диагностики</h1>
 			<p>Верно { result.Correct } из { result.Total }.</p>
 		</hgroup>
-		<table>
-			<thead><tr><th>Тема</th><th>Верно</th><th>Всего</th></tr></thead>
-			<tbody>
-				for _, topic := range result.Topics {
-					<tr><td>{ topic.Title }</td><td>{ topic.Correct }</td><td>{ topic.Total }</td></tr>
-				}
-			</tbody>
-		</table>
+		<div class="v-ring-grid">
+			for _, topic := range result.Topics {
+				@ui.Ring(ui.RingProps{Value: topic.Correct, Max: topic.Total, Label: topic.Title})
+			}
+		</div>
+		@ui.Table(ui.TableProps{
+			Head: []string{"Тема", "Верно", "Всего"},
+			Rows: topicRows(result.Topics),
+			Caption: "Разбивка результата по темам",
+		})
 		<p>Полный отчёт с рекомендациями доступен после регистрации.</p>
-		<p><a role="button" href="/register">Зарегистрироваться</a></p>
+		<p><a class="v-btn v-btn--primary v-btn--md" href="/register">Зарегистрироваться</a></p>
 	}
 }
 
-templ ArticlesView(articles []Article, next string) {
+templ ArticlesView(articles []Article, next string, brand string) {
 	@pageLayout(SEOMetadata{
 		Title:       "Статьи и разборы",
-		Description: "Публикации о подготовке к ОГЭ и ЕГЭ.",
+		Description: "Публикации о подготовке к экзаменам.",
 		Canonical:   "/articles",
 	}, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Статьи", Path: "/articles"},
-	}) {
+	}, brand) {
 		<hgroup>
 			<h1>Статьи и разборы</h1>
 			<p>Материалы о подготовке к экзаменам.</p>
 		</hgroup>
 		if len(articles) == 0 {
-			<article>Опубликованных статей пока нет.</article>
+			@ui.EmptyState(ui.EmptyStateProps{Title: "Опубликованных статей пока нет", Text: "Загляните позже — мы готовим новые разборы."})
 		} else {
-			<ul>
+			<div class="v-card-grid">
 				for _, article := range articles {
-					<li>
-						<a href={ "/articles/" + article.Slug }>{ article.Title }</a>
+					<article class="v-card v-article-card">
+						<h2><a href={ "/articles/" + article.Slug }>{ article.Title }</a></h2>
 						if article.Excerpt != "" {
 							<p>{ article.Excerpt }</p>
 						}
-					</li>
+						<a class="v-btn v-btn--secondary v-btn--sm" href={ "/articles/" + article.Slug }>Читать</a>
+					</article>
 				}
-			</ul>
+			</div>
 		}
 		if next != "" {
-			<p><a role="button" href={ "/articles?cursor=" + next }>Следующая страница</a></p>
+			<p><a class="v-btn v-btn--secondary v-btn--md" href={ "/articles?cursor=" + next }>Следующая страница</a></p>
 		}
 	}
 }
 
 templ ArticlePageView(view *ArticleView) {
-	@pageLayout(view.SEO, view.Breadcrumbs) {
-		<article>
+	@pageLayout(view.SEO, view.Breadcrumbs, view.Brand) {
+		<article class="v-prose">
 			<h1>{ view.Article.Title }</h1>
 			if view.Article.Excerpt != "" {
 				<p><em>{ view.Article.Excerpt }</em></p>
@@ -376,52 +471,34 @@ templ ArticlePageView(view *ArticleView) {
 
 templ leadForm(action, source string, fieldErrors map[string]string, success bool) {
 	if success {
-		<article role="status">Спасибо! Заявка отправлена, мы свяжемся с вами.</article>
+		@ui.Toast(ui.ToastProps{Tone: ui.ToneOK, Text: "Спасибо! Заявка отправлена, мы свяжемся с вами."})
 	}
 	if len(fieldErrors) > 0 {
-		<article role="alert">Проверьте поля формы.</article>
+		@ui.Toast(ui.ToastProps{Tone: ui.ToneErr, Text: "Проверьте поля формы."})
 	}
-	<form method="post" action={ action } hx-post={ action } hx-target="closest section">
+	<form method="post" action={ action } hx-post={ action } hx-target="closest section" class="v-form">
 		<input type="hidden" name="csrf_token" value="__CSRF__"/>
 		<input type="hidden" name="source" value={ source }/>
 		<div class="visually-hidden">
 			<label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"/></label>
 		</div>
-		<label>
-			Имя
-			<input type="text" name="name" required minlength="2" maxlength="100"/>
-			if fieldErrors["name"] != "" {
-				<small>{ fieldErrors["name"] }</small>
-			}
-		</label>
-		<label>
-			Контакт
-			<input type="text" name="contact" required minlength="3" maxlength="200" placeholder="email или телефон"/>
-			if fieldErrors["contact"] != "" {
-				<small>{ fieldErrors["contact"] }</small>
-			}
-		</label>
-		<label>
-			Комментарий
-			<textarea name="comment" maxlength="2000"></textarea>
-			if fieldErrors["comment"] != "" {
-				<small>{ fieldErrors["comment"] }</small>
-			}
-		</label>
-		<button type="submit">Отправить заявку</button>
+		@ui.Field(ui.FieldProps{Label: "Имя", Name: "name", Required: true, MinLength: 2, MaxLength: 100, Error: fieldErrors["name"]})
+		@ui.Field(ui.FieldProps{Label: "Контакт", Name: "contact", Required: true, MinLength: 3, MaxLength: 200, Placeholder: "email или телефон", Error: fieldErrors["contact"]})
+		@ui.Field(ui.FieldProps{Label: "Комментарий", Name: "comment", Multiline: true, MaxLength: 2000, Error: fieldErrors["comment"]})
+		@ui.Button(ui.ButtonProps{Label: "Отправить заявку", Type: "submit", Variant: ui.ButtonPrimary})
 	</form>
 }
 
-templ LeadFormView(source string, fieldErrors map[string]string, success bool) {
+templ LeadFormView(source string, fieldErrors map[string]string, success bool, brand string) {
 	@pageLayout(SEOMetadata{
 		Title:       "Оставить заявку",
-		Description: "Заявка на подготовку к ОГЭ и ЕГЭ.",
+		Description: "Заявка на подготовку к экзаменам.",
 		Canonical:   "/leads",
 		NoIndex:     true,
 	}, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Заявка", Path: "/leads"},
-	}) {
+	}, brand) {
 		<hgroup>
 			<h1>Оставить заявку</h1>
 			<p>Мы свяжемся с вами и поможем выбрать программу.</p>
@@ -432,23 +509,28 @@ templ LeadFormView(source string, fieldErrors map[string]string, success bool) {
 	}
 }
 
-templ ErrorView(status int, message string) {
+templ ErrorView(status int, message string, brand string) {
 	@pageLayout(SEOMetadata{
 		Title:   message,
 		NoIndex: true,
 	}, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: message, Path: "/"},
-	}) {
+	}, brand) {
 		<hgroup>
 			<h1>{ intString(status) }</h1>
-			<p>{ message }</p>
 		</hgroup>
-		<p><a role="button" href="/">На главную</a></p>
+		@ui.EmptyState(ui.EmptyStateProps{
+			Title: message,
+			Text: "Проверьте адрес страницы или вернитесь на главную.",
+			ActionLabel: "На главную",
+			ActionHref: "/",
+			Error: true,
+		})
 	}
 }
 
-templ DemoUnavailableView(exams []content.Exam) {
+templ DemoUnavailableView(exams []content.Exam, brand string) {
 	@pageLayout(SEOMetadata{
 		Title:       "Демо-диагностика",
 		Description: "Для выбранного трека пока недостаточно заданий.",
@@ -457,15 +539,22 @@ templ DemoUnavailableView(exams []content.Exam) {
 	}, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
-	}) {
+	}, brand) {
 		<hgroup>
 			<h1>Демо-диагностика</h1>
-			<p>Для выбранного трека пока недостаточно опубликованных заданий. Выберите другой трек.</p>
 		</hgroup>
-		<ul>
+		@ui.EmptyState(ui.EmptyStateProps{
+			Title: "Для выбранного трека пока недостаточно опубликованных заданий",
+			Text: "Выберите другой трек.",
+			ActionLabel: "К выбору трека",
+			ActionHref: "/diagnostics/demo",
+		})
+		<div class="v-card-grid">
 			for _, exam := range exams {
-				<li><a href={ "/diagnostics/demo?exam=" + exam.Code }>{ exam.Title }</a></li>
+				<article class={ "v-card v-track-card v-track-card--" + string(ui.SubjectTone(exam.Code)) }>
+					<h3><a href={ "/diagnostics/demo?exam=" + exam.Code }>{ exam.Title }</a></h3>
+				</article>
 			}
-		</ul>
+		</div>
 	}
 }

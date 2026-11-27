@@ -36,6 +36,19 @@ func TestLoadFromEnv(t *testing.T) {
 				if cfg.RateLimit.LoginPerMin != 10 || cfg.RateLimit.APIPerMin != 120 {
 					t.Fatalf("лимиты = %d/%d", cfg.RateLimit.LoginPerMin, cfg.RateLimit.APIPerMin)
 				}
+				if cfg.App.BrandName != "Верно" {
+					t.Fatalf("BRAND_NAME = %q", cfg.App.BrandName)
+				}
+			},
+		},
+		{
+			name:     "своё название продукта",
+			override: map[string]string{"BRAND_NAME": "Экзамен"},
+			check: func(t *testing.T, cfg *Config) {
+				t.Helper()
+				if cfg.App.BrandName != "Экзамен" {
+					t.Fatalf("BRAND_NAME = %q", cfg.App.BrandName)
+				}
 			},
 		},
 		{
@@ -212,6 +225,7 @@ func setFullEnv(t *testing.T, override map[string]string) {
 		"S3_REGION":                     "us-east-1",
 		"RATE_LIMIT_LOGIN_PER_MIN":      "10",
 		"RATE_LIMIT_API_PER_MIN":        "120",
+		"BRAND_NAME":                    "Верно",
 	}
 
 	for name, value := range values {

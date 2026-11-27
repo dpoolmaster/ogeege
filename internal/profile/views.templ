@@ -1,0 +1,49 @@
+package profile
+
+import (
+	"oge-ege/internal/shared/render"
+	"oge-ege/internal/shared/render/ui"
+)
+
+// PageViewData содержит данные шаблонного каркаса профиля.
+type PageViewData struct {
+	Brand       string
+	Title       string
+	Email       string
+	FirstName   string
+	LastName    string
+	RoleLabel   string
+	StatusLabel string
+}
+
+templ ProfilePageView(data PageViewData) {
+	@render.Layout(render.Chrome{Brand: data.Brand}, data.Title) {
+		<hgroup>
+			<h1>{ data.Title }</h1>
+			<p>Персональные данные и настройки подготовки.</p>
+		</hgroup>
+		<div class="v-card-grid">
+			@ui.Card(ui.CardProps{Title: "Учётная запись", Meta: data.Email}) {
+				<dl>
+					<dt>Роль</dt>
+					<dd>{ data.RoleLabel }</dd>
+					<dt>Статус</dt>
+					<dd>{ data.StatusLabel }</dd>
+				</dl>
+			}
+			@ui.Card(ui.CardProps{Title: "Личные данные", Meta: "Используются в отчётах"}) {
+				<form method="post" action="/profile" class="v-form">
+					@ui.Field(ui.FieldProps{Label: "Имя", Name: "first_name", Value: data.FirstName})
+					@ui.Field(ui.FieldProps{Label: "Фамилия", Name: "last_name", Value: data.LastName})
+					@ui.Button(ui.ButtonProps{Label: "Сохранить", Type: "submit", Variant: ui.ButtonPrimary})
+				</form>
+			}
+			@ui.Card(ui.CardProps{Title: "Учебная цель", Meta: "Трек и дата экзамена"}) {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title: "Цель пока не задана",
+					Text: "Выберите трек и дату экзамена в онбординге.",
+				})
+			}
+		</div>
+	}
+}

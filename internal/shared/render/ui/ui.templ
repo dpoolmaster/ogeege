@@ -1,0 +1,387 @@
+package ui
+
+import "strconv"
+
+templ Button(props ButtonProps) {
+	if props.Href != "" {
+		<a
+			href={ props.Href }
+			class={ props.classes() }
+			aria-disabled={ ariaBool(props.Disabled) }
+			if props.Disabled {
+				tabindex="-1"
+			}
+		>
+			{ props.Label }
+		</a>
+	} else {
+		<button
+			type={ props.buttonType() }
+			class={ props.classes() }
+			disabled?={ props.Disabled || props.Loading }
+			if props.Name != "" {
+				name={ props.Name }
+				value={ props.Value }
+			}
+		>
+			if props.Loading {
+				<span class="v-spinner" aria-hidden="true"></span>
+			}
+			{ props.Label }
+		</button>
+	}
+}
+
+templ Field(props FieldProps) {
+	<div class={ props.classes() }>
+		<label for={ props.id() }>{ props.Label }</label>
+		if props.Multiline {
+			<textarea
+				id={ props.id() }
+				name={ props.Name }
+				rows={ props.rows() }
+				autocomplete={ props.Autocomplete }
+				placeholder={ props.Placeholder }
+				required?={ props.Required }
+				disabled?={ props.Disabled }
+				aria-invalid={ ariaBool(props.Error != "") }
+				aria-describedby={ props.describedBy() }
+			>{ props.Value }</textarea>
+		} else {
+			<input
+				id={ props.id() }
+				type={ props.inputType() }
+				name={ props.Name }
+				value={ props.Value }
+				autocomplete={ props.Autocomplete }
+				placeholder={ props.Placeholder }
+				required?={ props.Required }
+				disabled?={ props.Disabled }
+				minlength={ intAttr(props.MinLength) }
+				maxlength={ intAttr(props.MaxLength) }
+				aria-invalid={ ariaBool(props.Error != "") }
+				aria-describedby={ props.describedBy() }
+			/>
+		}
+		if props.Hint != "" {
+			<small class="v-field__hint">{ props.Hint }</small>
+		}
+		if props.Error != "" {
+			<small class="v-field__error" id={ props.id() + "-error" }>{ props.Error }</small>
+		}
+	</div>
+}
+
+templ Badge(tone Tone, text string) {
+	<span class={ "v-badge " + toneClass("v-badge", tone) }>{ text }</span>
+}
+
+templ Card(props CardProps) {
+	<article class="v-card">
+		if props.Title != "" {
+			<header class="v-card__head">
+				if props.Href != "" {
+					<h3><a href={ props.Href }>{ props.Title }</a></h3>
+				} else {
+					<h3>{ props.Title }</h3>
+				}
+				if props.Meta != "" {
+					<p class="v-card__meta">{ props.Meta }</p>
+				}
+			</header>
+		}
+		{ children... }
+	</article>
+}
+
+templ Tabs(props TabsProps) {
+	<nav class="v-tabs" aria-label="Вкладки">
+		<ul>
+			for _, item := range props.Items {
+				<li>
+					if item.Disabled {
+						<span class="v-tab v-tab--disabled" aria-disabled="true">{ item.Label }</span>
+					} else if item.Label == props.Active {
+						<a class="v-tab v-tab--active" href={ item.Href } aria-current="page">{ item.Label }</a>
+					} else {
+						<a class="v-tab" href={ item.Href }>{ item.Label }</a>
+					}
+				</li>
+			}
+		</ul>
+	</nav>
+}
+
+templ Table(props TableProps) {
+	<div class="v-table-wrap" tabindex="0" role="region" aria-label={ tableLabel(props.Caption) }>
+		<table class={ props.classes() }>
+			if props.Caption != "" {
+				<caption>{ props.Caption }</caption>
+			}
+			if len(props.Head) > 0 {
+				<thead>
+					<tr>
+						for _, cell := range props.Head {
+							<th scope="col">{ cell }</th>
+						}
+					</tr>
+				</thead>
+			}
+			<tbody>
+				for _, row := range props.Rows {
+					<tr>
+						for _, cell := range row {
+							<td>{ cell }</td>
+						}
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+templ Panel(props PanelProps) {
+	<aside class={ props.classes() }>
+		if props.Title != "" {
+			<h2 class="v-panel__title">{ props.Title }</h2>
+		}
+		{ children... }
+	</aside>
+}
+
+templ Modal(props ModalProps) {
+	<dialog id={ props.ID } class="v-modal" open?={ props.Open }>
+		<article>
+			<header class="v-modal__head">
+				<h2>{ props.Title }</h2>
+				<form method="dialog">
+					<button type="submit" class="v-btn v-btn--ghost v-btn--sm" aria-label="Закрыть">×</button>
+				</form>
+			</header>
+			{ children... }
+		</article>
+	</dialog>
+}
+
+templ Toast(props ToastProps) {
+	<div class={ "v-toast " + toneClass("v-toast", props.Tone) } role={ toastRole(props.Tone) }>
+		{ props.Text }
+	</div>
+}
+
+templ EmptyState(props EmptyStateProps) {
+	<div class={ emptyClasses(props.Error) } role={ emptyRole(props.Error) }>
+		<h2>{ props.Title }</h2>
+		if props.Text != "" {
+			<p>{ props.Text }</p>
+		}
+		if props.ActionLabel != "" && props.ActionHref != "" {
+			<a class="v-btn v-btn--primary v-btn--md" href={ props.ActionHref }>{ props.ActionLabel }</a>
+		}
+	</div>
+}
+
+templ Skeleton(props SkeletonProps) {
+	<div class="v-skeleton" aria-hidden="true">
+		for i := 0; i < skeletonLines(props.Lines); i++ {
+			<span class="v-skeleton__line"></span>
+		}
+	</div>
+}
+
+templ Progress(props ProgressProps) {
+	<div class="v-progress">
+		<div class="v-progress__head">
+			if props.Label != "" {
+				<span>{ props.Label }</span>
+			}
+			<span class="v-nums">{ props.text() }</span>
+		</div>
+		<progress value={ strconv.Itoa(props.value()) } max={ strconv.Itoa(props.max()) }>{ props.text() }</progress>
+	</div>
+}
+
+templ Ring(props RingProps) {
+	<div class="v-ring" role="img" aria-label={ ringLabel(props.Label, props.text()) }>
+		<div class="v-ring__circle" style={ ringStyle(props.percent()) }>
+			<span class="v-nums">{ strconv.Itoa(props.percent()) }%</span>
+		</div>
+		<p class="v-ring__label">{ ringLabel(props.Label, props.text()) }</p>
+	</div>
+}
+
+templ Stepper(props StepperProps) {
+	<div class="v-stepper">
+		<span>{ stepperLabel(props.Label, props.text()) }</span>
+		<ol aria-hidden="true">
+			for i := 1; i <= props.total(); i++ {
+				<li class={ stepClass(i, props.current()) }>{ strconv.Itoa(i) }</li>
+			}
+		</ol>
+	</div>
+}
+
+templ ResultPanel(props ResultPanelProps) {
+	if props.Correct {
+		<div class="v-result v-result--ok" role="status">
+			<strong class="v-result__title">{ resultTitle(props.Title, "Верно") }</strong>
+			if props.Text != "" {
+				<p>{ props.Text }</p>
+			}
+			if props.NextHref != "" && props.NextLabel != "" {
+				<a class="v-btn v-btn--secondary v-btn--md" href={ props.NextHref }>{ props.NextLabel }</a>
+			}
+		</div>
+	} else {
+		<div class="v-result v-result--err" role="alert">
+			<strong class="v-result__title">{ resultTitle(props.Title, "Неверно") }</strong>
+			if props.Text != "" {
+				<p>{ props.Text }</p>
+			}
+			if props.NextHref != "" && props.NextLabel != "" {
+				<a class="v-btn v-btn--secondary v-btn--md" href={ props.NextHref }>{ props.NextLabel }</a>
+			}
+		</div>
+	}
+}
+
+templ Breadcrumbs(items []Crumb) {
+	<nav class="v-crumbs" aria-label="Хлебные крошки">
+		<ol>
+			for i, item := range items {
+				<li>
+					if i == len(items)-1 {
+						<span aria-current="page">{ item.Title }</span>
+					} else {
+						<a href={ item.Path }>{ item.Title }</a>
+					}
+				</li>
+			}
+		</ol>
+	</nav>
+}
+
+templ HelpTip(text string) {
+	<details class="v-help">
+		<summary aria-label="Подсказка">?</summary>
+		<p>{ text }</p>
+	</details>
+}
+
+templ TaskCard(props TaskCardProps) {
+	<article class="v-card v-task-card">
+		<div class="v-task-card__top">
+			@Badge(ToneAccent, "КИМ "+strconv.Itoa(props.KimNumber))
+			if props.Topic != "" {
+				@Badge(ToneNeutral, props.Topic)
+			}
+		</div>
+		<p class="v-task-card__excerpt">{ props.Excerpt }</p>
+		if props.Href != "" {
+			<a class="v-btn v-btn--secondary v-btn--sm" href={ props.Href }>Решать</a>
+		}
+	</article>
+}
+
+templ GapHeatmap(props GapHeatmapProps) {
+	<div class="v-table-wrap" tabindex="0" role="region" aria-label="Карта пробелов">
+		<table class="v-table v-heatmap">
+			<caption>Карта пробелов: темы по строкам, номера КИМ по столбцам</caption>
+			<thead>
+				<tr>
+					<th scope="col">Тема</th>
+					for _, number := range props.KimNumbers {
+						<th scope="col">{ strconv.Itoa(number) }</th>
+					}
+				</tr>
+			</thead>
+			<tbody>
+				for rowIndex, topic := range props.Topics {
+					<tr>
+						<th scope="row">{ topic }</th>
+						for columnIndex, number := range props.KimNumbers {
+							<td>
+								@heatCell(cellAt(props.Cells, rowIndex, columnIndex), topic, number)
+							</td>
+						}
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+templ heatCell(cell GapCell, topic string, number int) {
+	<span class={ "v-heatmap__cell " + toneClass("v-heatmap__cell", gapTone(cell.State)) } aria-label={ topic + ", КИМ " + strconv.Itoa(number) + ": " + gapLabel(cell) }>
+		<span aria-hidden="true">{ gapSymbol(cell.State) }</span>
+		<span class="visually-hidden">{ gapLabel(cell) }</span>
+	</span>
+}
+
+templ AppShell(props AppShellProps) {
+	<div class="v-shell">
+		<header class="v-shell__top">
+			<a class="v-shell__brand" href="/">{ brandName(props.Brand) }</a>
+			<h1 class="v-shell__title">{ props.PageTitle }</h1>
+			if props.Actions != nil {
+				<div class="v-shell__actions">
+					@props.Actions
+				</div>
+			}
+		</header>
+		<div class="v-shell__body">
+			<nav class="v-shell__nav" aria-label="Основная навигация">
+				for _, group := range props.Nav {
+					<div class="v-shell__group">
+						if group.Title != "" {
+							<p class="v-shell__group-title">{ group.Title }</p>
+						}
+						<ul>
+							for _, item := range group.Items {
+								<li>
+									if item.Active {
+										<a href={ item.Href } aria-current="page">{ item.Label }</a>
+									} else {
+										<a href={ item.Href }>{ item.Label }</a>
+									}
+								</li>
+							}
+						</ul>
+					</div>
+				}
+			</nav>
+			<main id="main-content" class="v-shell__main">
+				{ children... }
+			</main>
+		</div>
+	</div>
+}
+
+templ TodayScreen(props TodayScreenProps) {
+	<div class="v-today">
+		@Card(CardProps{Title: "Ближайший шаг", Meta: "Что делать дальше"}) {
+			<p>{ props.NextStep }</p>
+			if props.NextHref != "" {
+				<a class="v-btn v-btn--primary v-btn--md" href={ props.NextHref }>Продолжить</a>
+			}
+		}
+		@Card(CardProps{Title: "Пробелы", Meta: "Темы для повторения"}) {
+			if len(props.Gaps) == 0 {
+				@EmptyState(EmptyStateProps{Title: "Пробелов нет", Text: "Продолжайте практику, чтобы закрепить результат."})
+			} else {
+				<ul class="v-today__gaps">
+					for _, gap := range props.Gaps {
+						<li>
+							@Badge(gap.Tone, strconv.Itoa(gap.Count))
+							<span>{ gap.Title }</span>
+						</li>
+					}
+				</ul>
+			}
+		}
+		@Card(CardProps{Title: "Цель", Meta: "Прогресс подготовки"}) {
+			<p>{ props.Goal }</p>
+			@Progress(ProgressProps{Value: props.GoalCurrent, Max: props.GoalMax, Label: "Готовность"})
+		}
+	</div>
+}

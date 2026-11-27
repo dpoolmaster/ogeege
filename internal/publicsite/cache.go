@@ -110,7 +110,7 @@ func (c *Cache) evict(now time.Time) {
 	var oldestKey string
 	var oldestTime time.Time
 	for key, entry := range c.entries {
-		if oldestKey == "" || entry.createdAt.Before(oldestTime) {
+		if oldestKey == "" || entry.createdAt.Before(oldestTime) || (entry.createdAt.Equal(oldestTime) && key < oldestKey) {
 			oldestKey = key
 			oldestTime = entry.createdAt
 		}

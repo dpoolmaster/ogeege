@@ -1,30 +1,27 @@
 package auth
 
-import "oge-ege/internal/shared/render"
+import (
+	"oge-ege/internal/shared/render"
+	"oge-ege/internal/shared/render/ui"
+)
 
 templ LoginPage(data PageData) {
-	@render.Layout("Вход") {
+	@render.Layout(render.Chrome{Brand: data.Brand}, "Вход") {
 		<hgroup>
 			<h1>Вход</h1>
 			<p>Войдите, чтобы продолжить подготовку.</p>
 		</hgroup>
 		if data.Error != "" {
-			<article role="alert">{ data.Error }</article>
+			@ui.Toast(ui.ToastProps{Tone: ui.ToneErr, Text: data.Error})
 		}
 		if data.Message != "" {
-			<article>{ data.Message }</article>
+			@ui.Toast(ui.ToastProps{Tone: ui.ToneOK, Text: data.Message})
 		}
-		<form method="post" action="/login">
+		<form method="post" action="/login" class="v-form">
 			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<label>
-				Email
-				<input type="email" name="email" value={ data.Email } autocomplete="email" required/>
-			</label>
-			<label>
-				Пароль
-				<input type="password" name="password" autocomplete="current-password" required/>
-			</label>
-			<button type="submit">Войти</button>
+			@ui.Field(ui.FieldProps{Label: "Email", Name: "email", Type: "email", Value: data.Email, Autocomplete: "email", Required: true})
+			@ui.Field(ui.FieldProps{Label: "Пароль", Name: "password", Type: "password", Autocomplete: "current-password", Required: true})
+			@ui.Button(ui.ButtonProps{Label: "Войти", Type: "submit", Variant: ui.ButtonPrimary})
 		</form>
 		<p>
 			Нет аккаунта? <a href="/register">Зарегистрироваться</a>
@@ -36,41 +33,34 @@ templ LoginPage(data PageData) {
 }
 
 templ RegisterPage(data PageData) {
-	@render.Layout("Регистрация") {
+	@render.Layout(render.Chrome{Brand: data.Brand}, "Регистрация") {
 		<hgroup>
 			<h1>Регистрация</h1>
 			<p>Создайте аккаунт ученика или родителя.</p>
 		</hgroup>
 		if data.Error != "" {
-			<article role="alert">{ data.Error }</article>
+			@ui.Toast(ui.ToastProps{Tone: ui.ToneErr, Text: data.Error})
 		}
-		<form method="post" action="/register">
+		<form method="post" action="/register" class="v-form">
 			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<label>
-				Email
-				<input type="email" name="email" value={ data.Email } autocomplete="email" required/>
-			</label>
-			<label>
-				Пароль
-				<input type="password" name="password" autocomplete="new-password" minlength="10" required/>
-				<small>Не менее 10 символов.</small>
-			</label>
-			<label>
-				Роль
-				<select name="role">
+			@ui.Field(ui.FieldProps{Label: "Email", Name: "email", Type: "email", Value: data.Email, Autocomplete: "email", Required: true})
+			@ui.Field(ui.FieldProps{Label: "Пароль", Name: "password", Type: "password", Autocomplete: "new-password", Hint: "Не менее 10 символов.", Required: true, MinLength: 10})
+			<div class="v-field">
+				<label for="field-role">Роль</label>
+				<select id="field-role" name="role">
 					<option value="student">Ученик</option>
 					<option value="parent">Родитель</option>
 				</select>
-			</label>
-			<label>
+			</div>
+			<label class="v-check">
 				<input type="checkbox" name="personal_data" value="true"/>
 				Согласен на обработку персональных данных
 			</label>
-			<label>
+			<label class="v-check">
 				<input type="checkbox" name="legal_representative" value="true"/>
 				Есть согласие законного представителя (для несовершеннолетних)
 			</label>
-			<button type="submit">Создать аккаунт</button>
+			@ui.Button(ui.ButtonProps{Label: "Создать аккаунт", Type: "submit", Variant: ui.ButtonPrimary})
 		</form>
 		<p>
 			Уже есть аккаунт? <a href="/login">Войти</a>
@@ -79,64 +69,55 @@ templ RegisterPage(data PageData) {
 }
 
 templ VerifyEmailPage(data PageData) {
-	@render.Layout("Подтверждение email") {
+	@render.Layout(render.Chrome{Brand: data.Brand}, "Подтверждение email") {
 		<hgroup>
 			<h1>Подтверждение email</h1>
 			<p>Перейдите по ссылке из письма или подтвердите адрес кнопкой ниже.</p>
 		</hgroup>
 		if data.Error != "" {
-			<article role="alert">{ data.Error }</article>
+			@ui.Toast(ui.ToastProps{Tone: ui.ToneErr, Text: data.Error})
 		}
 		if data.Message != "" {
-			<article>{ data.Message }</article>
+			@ui.Toast(ui.ToastProps{Tone: ui.ToneOK, Text: data.Message})
 		}
 		if data.Token != "" {
-			<form method="post" action="/verify-email">
+			<form method="post" action="/verify-email" class="v-form">
 				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 				<input type="hidden" name="token" value={ data.Token }/>
-				<button type="submit">Подтвердить email</button>
+				@ui.Button(ui.ButtonProps{Label: "Подтвердить email", Type: "submit", Variant: ui.ButtonPrimary})
 			</form>
 		}
-		<form method="post" action="/resend-verification">
+		<form method="post" action="/resend-verification" class="v-form">
 			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<label>
-				Отправить письмо повторно
-				<input type="email" name="email" value={ data.Email } autocomplete="email" required/>
-			</label>
-			<button type="submit">Отправить</button>
+			@ui.Field(ui.FieldProps{Label: "Отправить письмо повторно", Name: "email", Type: "email", Value: data.Email, Autocomplete: "email", Required: true})
+			@ui.Button(ui.ButtonProps{Label: "Отправить", Type: "submit", Variant: ui.ButtonSecondary})
 		</form>
 	}
 }
 
 templ PasswordResetPage(data PageData) {
-	@render.Layout("Сброс пароля") {
+	@render.Layout(render.Chrome{Brand: data.Brand}, "Сброс пароля") {
 		<hgroup>
 			<h1>Сброс пароля</h1>
 		</hgroup>
 		if data.Error != "" {
-			<article role="alert">{ data.Error }</article>
+			@ui.Toast(ui.ToastProps{Tone: ui.ToneErr, Text: data.Error})
 		}
 		if data.Message != "" {
-			<article>{ data.Message }</article>
+			@ui.Toast(ui.ToastProps{Tone: ui.ToneOK, Text: data.Message})
 		}
 		if data.Token != "" {
-			<form method="post" action="/password/reset">
+			<form method="post" action="/password/reset" class="v-form">
 				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 				<input type="hidden" name="token" value={ data.Token }/>
-				<label>
-					Новый пароль
-					<input type="password" name="new_password" autocomplete="new-password" minlength="10" required/>
-				</label>
-				<button type="submit">Сохранить пароль</button>
+				@ui.Field(ui.FieldProps{Label: "Новый пароль", Name: "new_password", Type: "password", Autocomplete: "new-password", Required: true, MinLength: 10})
+				@ui.Button(ui.ButtonProps{Label: "Сохранить пароль", Type: "submit", Variant: ui.ButtonPrimary})
 			</form>
 		} else {
-			<form method="post" action="/password/reset-request">
+			<form method="post" action="/password/reset-request" class="v-form">
 				<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-				<label>
-					Email
-					<input type="email" name="email" value={ data.Email } autocomplete="email" required/>
-				</label>
-				<button type="submit">Отправить ссылку</button>
+				@ui.Field(ui.FieldProps{Label: "Email", Name: "email", Type: "email", Value: data.Email, Autocomplete: "email", Required: true})
+				@ui.Button(ui.ButtonProps{Label: "Отправить ссылку", Type: "submit", Variant: ui.ButtonPrimary})
 			</form>
 		}
 		<p>
@@ -146,16 +127,16 @@ templ PasswordResetPage(data PageData) {
 }
 
 templ AccountPage(data PageData) {
-	@render.Layout("Аккаунт") {
+	@render.Layout(render.Chrome{Brand: data.Brand}, "Аккаунт") {
 		<hgroup>
 			<h1>Аккаунт</h1>
 			<p>Вы вошли как { data.Email }.</p>
 		</hgroup>
 		if data.Error != "" {
-			<article role="alert">{ data.Error }</article>
+			@ui.Toast(ui.ToastProps{Tone: ui.ToneErr, Text: data.Error})
 		}
 		if data.Message != "" {
-			<article>{ data.Message }</article>
+			@ui.Toast(ui.ToastProps{Tone: ui.ToneOK, Text: data.Message})
 		}
 		<dl>
 			<dt>Роль</dt>
@@ -163,22 +144,22 @@ templ AccountPage(data PageData) {
 			<dt>Статус</dt>
 			<dd>{ data.StatusLabel }</dd>
 		</dl>
-		<form method="post" action="/logout">
+		<form method="post" action="/logout" class="v-form">
 			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<button type="submit">Выйти</button>
+			@ui.Button(ui.ButtonProps{Label: "Выйти", Type: "submit", Variant: ui.ButtonSecondary})
 		</form>
 	}
 }
 
 templ LogoutPage(data PageData) {
-	@render.Layout("Выход") {
+	@render.Layout(render.Chrome{Brand: data.Brand}, "Выход") {
 		<hgroup>
 			<h1>Выход</h1>
 			<p>Вы вошли как { data.Email }.</p>
 		</hgroup>
-		<form method="post" action="/logout">
+		<form method="post" action="/logout" class="v-form">
 			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
-			<button type="submit">Выйти</button>
+			@ui.Button(ui.ButtonProps{Label: "Выйти", Type: "submit", Variant: ui.ButtonPrimary})
 		</form>
 		<p>
 			<a href="/account">Вернуться в аккаунт</a>

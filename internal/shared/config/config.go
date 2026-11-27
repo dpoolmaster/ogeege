@@ -31,6 +31,7 @@ type AppConfig struct {
 	BaseURL       string
 	SessionSecret string
 	MigrationsDir string
+	BrandName     string
 }
 
 // HTTPConfig содержит настройки HTTP-сервера.
@@ -145,6 +146,7 @@ type rawConfig struct {
 	AppBaseURL              string `env:"APP_BASE_URL"`
 	AppSessionSecret        string `env:"SESSION_SECRET"`
 	AppMigrationsDir        string `env:"MIGRATIONS_DIR"`
+	AppBrandName            string `env:"BRAND_NAME" env-default:"Верно"`
 	HTTPAddr                string `env:"HTTP_ADDR"`
 	HTTPReadTimeoutSeconds  string `env:"HTTP_READ_TIMEOUT_SECONDS" env-default:"10"`
 	HTTPWriteTimeoutSeconds string `env:"HTTP_WRITE_TIMEOUT_SECONDS" env-default:"15"`
@@ -198,6 +200,7 @@ func parseConfig(raw *rawConfig) (*Config, error) {
 
 	sessionSecret := requireString(&errs, "SESSION_SECRET", raw.AppSessionSecret)
 	migrationsDir := requireString(&errs, "MIGRATIONS_DIR", raw.AppMigrationsDir)
+	brandName := optionalString(raw.AppBrandName, "Верно")
 
 	httpAddr := requireString(&errs, "HTTP_ADDR", raw.HTTPAddr)
 	readTimeout := parseInt(&errs, "HTTP_READ_TIMEOUT_SECONDS", raw.HTTPReadTimeoutSeconds, 1, 3600)
@@ -244,6 +247,7 @@ func parseConfig(raw *rawConfig) (*Config, error) {
 			BaseURL:       baseURL,
 			SessionSecret: sessionSecret,
 			MigrationsDir: migrationsDir,
+			BrandName:     brandName,
 		},
 		HTTP: HTTPConfig{
 			Addr:            httpAddr,
@@ -286,6 +290,15 @@ func requireString(errs *validationErrors, name, value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		errs.addf("переменная %s обязательна", name)
+	}
+
+	return value
+}
+
+func optionalString(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
 	}
 
 	return value

@@ -14,7 +14,7 @@ import (
 func newHTMLRouter(env *testEnv) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 
-	handler := NewHandler(env.service, nil, nil, discardLogger())
+	handler := NewHandler(env.service, nil, nil, discardLogger(), "")
 	router := gin.New()
 	router.GET("/login", handler.ShowLogin)
 	router.GET("/register", handler.ShowRegister)

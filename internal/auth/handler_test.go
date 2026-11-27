@@ -13,7 +13,7 @@ import (
 func newTestRouter(env *testEnv) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 
-	handler := NewHandler(env.service, nil, nil, discardLogger())
+	handler := NewHandler(env.service, nil, nil, discardLogger(), "")
 	router := gin.New()
 	router.POST("/api/auth/register", handler.Register)
 	router.POST("/api/auth/verify-email", handler.VerifyEmail)

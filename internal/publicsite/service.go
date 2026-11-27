@@ -26,6 +26,7 @@ type ContentProvider interface {
 	GetExamByCode(ctx context.Context, code string) (*content.Exam, error)
 	GetLatestPublishedExamYear(ctx context.Context, examID uuid.UUID) (*content.ExamYear, error)
 	ListKimNumbers(ctx context.Context, filter content.KimNumberFilter) ([]content.KimNumber, error)
+	GetKimNumber(ctx context.Context, id uuid.UUID) (*content.KimNumber, error)
 	GetKimNumberByNumber(ctx context.Context, examYearID uuid.UUID, number int) (*content.KimNumber, error)
 	ListTopics(ctx context.Context, filter content.TopicFilter) ([]content.Topic, error)
 	GetTopic(ctx context.Context, id uuid.UUID) (*content.Topic, error)
@@ -105,12 +106,14 @@ type Breadcrumb struct {
 
 // HomePage — данные главной страницы.
 type HomePage struct {
+	Brand string
 	Exams []content.Exam
 	SEO   SEOMetadata
 }
 
 // LandingPage — данные лендинга трека.
 type LandingPage struct {
+	Brand      string
 	Exam       content.Exam
 	Year       *content.ExamYear
 	KimNumbers []content.KimNumber
@@ -129,6 +132,7 @@ type BankFilter struct {
 
 // BankPage — данные страницы банка.
 type BankPage struct {
+	Brand      string
 	Exam       *content.Exam
 	Year       *content.ExamYear
 	Tasks      []content.Task
@@ -142,6 +146,7 @@ type BankPage struct {
 
 // TaskPage — данные карточки задания.
 type TaskPage struct {
+	Brand         string
 	Task          content.Task
 	StatementHTML string
 	Topic         *content.Topic
@@ -160,6 +165,7 @@ type CheckResult struct {
 
 // DemoStart — данные запуска демо-диагностики.
 type DemoStart struct {
+	Brand string
 	Exam  content.Exam
 	Year  content.ExamYear
 	Tasks []content.Task
@@ -182,6 +188,7 @@ type DemoResult struct {
 
 // ArticleView — данные страницы статьи.
 type ArticleView struct {
+	Brand       string
 	Article     Article
 	ContentHTML string
 	SEO         SEOMetadata
@@ -317,6 +324,9 @@ func (s *Service) Bank(ctx context.Context, filter BankFilter) (*BankPage, error
 		page.NextCursor = tasks[len(tasks)-1].ID
 		page.HasNext = true
 	}
+	if err := s.resolveTaskRefs(ctx, page); err != nil {
+		return nil, err
+	}
 
 	title := "Открытый банк заданий"
 	if page.Exam != nil {
@@ -325,6 +335,45 @@ func (s *Service) Bank(ctx context.Context, filter BankFilter) (*BankPage, error
 	page.SEO = s.seoFor(ctx, "/bank", title, "Открытый банк заданий с автоматической проверкой ответа.")
 
 	return page, nil
+}
+
+// resolveTaskRefs дополняет номера КИМ и темы заданиями без фильтра по треку.
+func (s *Service) resolveTaskRefs(ctx context.Context, page *BankPage) error {
+	knownKim := make(map[uuid.UUID]bool, len(page.KimNumbers))
+	for _, kim := range page.KimNumbers {
+		knownKim[kim.ID] = true
+	}
+	knownTopic := make(map[uuid.UUID]bool, len(page.Topics))
+	for _, topic := range page.Topics {
+		knownTopic[topic.ID] = true
+	}
+
+	for _, task := range page.Tasks {
+		if !knownKim[task.KimNumberID] {
+			knownKim[task.KimNumberID] = true
+			kim, err := s.content.GetKimNumber(ctx, task.KimNumberID)
+			if err != nil {
+				if !errors.Is(err, content.ErrNotFound) {
+					return err
+				}
+			} else {
+				page.KimNumbers = append(page.KimNumbers, *kim)
+			}
+		}
+		if task.TopicID != nil && !knownTopic[*task.TopicID] {
+			knownTopic[*task.TopicID] = true
+			topic, err := s.content.GetTopic(ctx, *task.TopicID)
+			if err != nil {
+				if !errors.Is(err, content.ErrNotFound) {
+					return err
+				}
+			} else {
+				page.Topics = append(page.Topics, *topic)
+			}
+		}
+	}
+
+	return nil
 }
 
 // Task возвращает карточку опубликованного публичного задания.

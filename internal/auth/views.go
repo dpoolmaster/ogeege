@@ -12,6 +12,7 @@ import (
 
 // PageData содержит данные Templ-страниц аутентификации.
 type PageData struct {
+	Brand       string
 	CSRF        string
 	Error       string
 	Message     string
@@ -27,7 +28,7 @@ func (h *Handler) ShowLogin(c *gin.Context) {
 		return
 	}
 
-	data := PageData{CSRF: h.csrfToken(c)}
+	data := PageData{Brand: h.brand, CSRF: h.csrfToken(c)}
 	if c.Query("verified") != "" {
 		data.Message = "Email подтверждён. Войдите в систему."
 	}
@@ -43,12 +44,13 @@ func (h *Handler) ShowRegister(c *gin.Context) {
 		return
 	}
 
-	h.render(c, http.StatusOK, RegisterPage(PageData{CSRF: h.csrfToken(c)}))
+	h.render(c, http.StatusOK, RegisterPage(PageData{Brand: h.brand, CSRF: h.csrfToken(c)}))
 }
 
 // ShowVerifyEmail обрабатывает GET /verify-email.
 func (h *Handler) ShowVerifyEmail(c *gin.Context) {
 	h.render(c, http.StatusOK, VerifyEmailPage(PageData{
+		Brand: h.brand,
 		CSRF:  h.csrfToken(c),
 		Token: c.Query("token"),
 	}))
@@ -63,6 +65,7 @@ func (h *Handler) ShowAccount(c *gin.Context) {
 	}
 
 	h.render(c, http.StatusOK, AccountPage(PageData{
+		Brand:       h.brand,
 		CSRF:        h.csrfToken(c),
 		Email:       user.Email,
 		RoleLabel:   roleLabel(user.Role),
@@ -79,6 +82,7 @@ func (h *Handler) ShowLogout(c *gin.Context) {
 	}
 
 	h.render(c, http.StatusOK, LogoutPage(PageData{
+		Brand: h.brand,
 		CSRF:  h.csrfToken(c),
 		Email: user.Email,
 	}))
@@ -87,6 +91,7 @@ func (h *Handler) ShowLogout(c *gin.Context) {
 // ShowPasswordReset обрабатывает GET /password/reset.
 func (h *Handler) ShowPasswordReset(c *gin.Context) {
 	h.render(c, http.StatusOK, PasswordResetPage(PageData{
+		Brand: h.brand,
 		CSRF:  h.csrfToken(c),
 		Token: c.Query("token"),
 	}))

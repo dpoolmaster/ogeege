@@ -29,6 +29,7 @@ type Handler struct {
 	logger  *slog.Logger
 	secure  bool
 	baseURL string
+	brand   string
 }
 
 // NewHandler создаёт публичный HTTP-обработчик.
@@ -40,6 +41,7 @@ func NewHandler(
 	logger *slog.Logger,
 	secure bool,
 	baseURL string,
+	brand string,
 ) *Handler {
 	return &Handler{
 		service: service,
@@ -49,6 +51,7 @@ func NewHandler(
 		logger:  logger,
 		secure:  secure,
 		baseURL: strings.TrimRight(baseURL, "/"),
+		brand:   brand,
 	}
 }
 
@@ -82,6 +85,7 @@ func (h *Handler) Home(c *gin.Context) {
 		h.renderError(c, http.StatusInternalServerError, "Не удалось открыть главную страницу")
 		return
 	}
+	page.Brand = h.brand
 
 	h.renderCached(c, http.StatusOK, HomePageView(page))
 }
@@ -93,6 +97,7 @@ func (h *Handler) Landing(c *gin.Context) {
 		h.handlePageError(c, err)
 		return
 	}
+	page.Brand = h.brand
 
 	h.renderCached(c, http.StatusOK, LandingView(page))
 }
@@ -104,6 +109,7 @@ func (h *Handler) Bank(c *gin.Context) {
 		h.handlePageError(c, err)
 		return
 	}
+	page.Brand = h.brand
 
 	h.renderCached(c, http.StatusOK, BankView(page))
 }
@@ -115,6 +121,7 @@ func (h *Handler) BankFragment(c *gin.Context) {
 		h.handlePageError(c, err)
 		return
 	}
+	page.Brand = h.brand
 
 	h.renderCached(c, http.StatusOK, BankResultsView(page))
 }
@@ -132,6 +139,7 @@ func (h *Handler) Task(c *gin.Context) {
 		h.handlePageError(c, err)
 		return
 	}
+	page.Brand = h.brand
 
 	h.renderCached(c, http.StatusOK, TaskView(page))
 }
@@ -160,6 +168,7 @@ func (h *Handler) CheckTask(c *gin.Context) {
 		return
 	}
 	page.Result = result
+	page.Brand = h.brand
 
 	h.render(c, http.StatusOK, TaskView(page))
 }
@@ -173,6 +182,7 @@ func (h *Handler) Demo(c *gin.Context) {
 			h.renderError(c, http.StatusInternalServerError, "Не удалось открыть демо-диагностику")
 			return
 		}
+		page.Brand = h.brand
 		h.render(c, http.StatusOK, DemoChoiceView(page))
 		return
 	}
@@ -185,7 +195,7 @@ func (h *Handler) Demo(c *gin.Context) {
 				h.renderError(c, http.StatusInternalServerError, "Не удалось открыть демо-диагностику")
 				return
 			}
-			h.render(c, http.StatusOK, DemoUnavailableView(page.Exams))
+			h.render(c, http.StatusOK, DemoUnavailableView(page.Exams, h.brand))
 			return
 		}
 		h.handlePageError(c, err)
@@ -202,6 +212,7 @@ func (h *Handler) Demo(c *gin.Context) {
 		return
 	}
 
+	start.Brand = h.brand
 	h.setDemoCookie(c, token, int(DemoTTL.Seconds()))
 	h.render(c, http.StatusOK, DemoView(start, token))
 }
@@ -230,7 +241,7 @@ func (h *Handler) CheckDemo(c *gin.Context) {
 	}
 
 	h.clearDemoCookie(c)
-	h.render(c, http.StatusOK, DemoResultView(result))
+	h.render(c, http.StatusOK, DemoResultView(result, h.brand))
 }
 
 // Articles обслуживает список статей.
@@ -254,7 +265,7 @@ func (h *Handler) Articles(c *gin.Context) {
 		next = articles[len(articles)-1].PublishedAt.Format(time.RFC3339Nano)
 	}
 
-	h.renderCached(c, http.StatusOK, ArticlesView(articles, next))
+	h.renderCached(c, http.StatusOK, ArticlesView(articles, next, h.brand))
 }
 
 // Article обслуживает страницу статьи.
@@ -264,6 +275,7 @@ func (h *Handler) Article(c *gin.Context) {
 		h.handlePageError(c, err)
 		return
 	}
+	view.Brand = h.brand
 
 	h.renderCached(c, http.StatusOK, ArticlePageView(view))
 }
@@ -301,7 +313,7 @@ func (h *Handler) submitLead(c *gin.Context, fragment bool) {
 				h.render(c, http.StatusUnprocessableEntity, leadForm("/hx/leads", source, fields, false))
 				return
 			}
-			h.render(c, http.StatusUnprocessableEntity, LeadFormView(source, fields, false))
+			h.render(c, http.StatusUnprocessableEntity, LeadFormView(source, fields, false, h.brand))
 			return
 		}
 
@@ -313,7 +325,7 @@ func (h *Handler) submitLead(c *gin.Context, fragment bool) {
 		h.render(c, http.StatusOK, leadForm("/hx/leads", source, nil, true))
 		return
 	}
-	h.render(c, http.StatusOK, LeadFormView(source, nil, true))
+	h.render(c, http.StatusOK, LeadFormView(source, nil, true, h.brand))
 }
 
 // Sitemap отдаёт sitemap.xml.
@@ -427,7 +439,7 @@ func (h *Handler) render(c *gin.Context, status int, component templ.Component) 
 }
 
 func (h *Handler) renderError(c *gin.Context, status int, message string) {
-	h.render(c, status, ErrorView(status, message))
+	h.render(c, status, ErrorView(status, message, h.brand))
 }
 
 func (h *Handler) writeHTML(c *gin.Context, status int, body []byte, cacheable bool) {
