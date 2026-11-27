@@ -118,11 +118,16 @@ body {
   margin-bottom: 1rem;
 }
 
-.admin-form label {
+.admin-form label,
+.admin-field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.85rem;
+}
+
+.admin-field {
+  margin-bottom: 1rem;
 }
 
 .admin-form input,

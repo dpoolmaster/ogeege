@@ -131,45 +131,93 @@ onMounted(load)
   <p v-if="error" class="admin-error">{{ error }}</p>
 
   <form class="admin-form" @submit.prevent="load">
-    <input v-model="filter.exam_year_id" placeholder="ID учебного года" />
-    <input v-model="filter.kim_number_id" placeholder="ID номера КИМ" />
-    <select v-model="filter.status">
-      <option value="">Любой статус</option>
-      <option value="draft">Черновик</option>
-      <option value="published">Опубликовано</option>
-      <option value="archived">Архив</option>
-    </select>
-    <input v-model="filter.query" placeholder="Поиск" />
+    <label>
+      ID учебного года
+      <input v-model="filter.exam_year_id" placeholder="ID учебного года" />
+    </label>
+    <label>
+      ID номера КИМ
+      <input v-model="filter.kim_number_id" placeholder="ID номера КИМ" />
+    </label>
+    <label>
+      Статус
+      <select v-model="filter.status">
+        <option value="">Любой статус</option>
+        <option value="draft">Черновик</option>
+        <option value="published">Опубликовано</option>
+        <option value="archived">Архив</option>
+      </select>
+    </label>
+    <label>
+      Поиск
+      <input v-model="filter.query" placeholder="Поиск" />
+    </label>
     <button type="submit">Фильтр</button>
   </form>
 
   <h3>{{ editingId ? 'Изменить задание' : 'Новое задание' }}</h3>
   <form class="admin-form" @submit.prevent="save">
-    <input v-model="form.exam_year_id" placeholder="ID учебного года" required />
-    <input v-model="form.kim_number_id" placeholder="ID номера КИМ" required />
-    <input v-model="form.topic_id" placeholder="ID темы" />
-    <select v-model="form.difficulty">
-      <option value="easy">Лёгкое</option>
-      <option value="medium">Среднее</option>
-      <option value="hard">Сложное</option>
-    </select>
-    <input v-model="form.source" placeholder="Источник" required />
-    <input v-model="form.source_ref" placeholder="Ссылка на источник" />
-    <input v-model="form.answer_display" placeholder="Отображаемый ответ" />
-    <textarea v-model="form.answer_spec" placeholder="answer_spec JSON"></textarea>
+    <label>
+      ID учебного года
+      <input v-model="form.exam_year_id" placeholder="ID учебного года" required />
+    </label>
+    <label>
+      ID номера КИМ
+      <input v-model="form.kim_number_id" placeholder="ID номера КИМ" required />
+    </label>
+    <label>
+      ID темы
+      <input v-model="form.topic_id" placeholder="ID темы" />
+    </label>
+    <label>
+      Сложность
+      <select v-model="form.difficulty">
+        <option value="easy">Лёгкое</option>
+        <option value="medium">Среднее</option>
+        <option value="hard">Сложное</option>
+      </select>
+    </label>
+    <label>
+      Источник
+      <input v-model="form.source" placeholder="Источник" required />
+    </label>
+    <label>
+      Ссылка на источник
+      <input v-model="form.source_ref" placeholder="Ссылка на источник" />
+    </label>
+    <label>
+      Отображаемый ответ
+      <input v-model="form.answer_display" placeholder="Отображаемый ответ" />
+    </label>
+    <label>
+      answer_spec JSON
+      <textarea v-model="form.answer_spec" placeholder="answer_spec JSON"></textarea>
+    </label>
     <button type="submit">Сохранить</button>
     <button v-if="editingId" type="button" class="secondary" @click="resetForm">Отмена</button>
   </form>
-  <Editor v-model="form.statement_md" />
+  <div class="admin-field">
+    <span>Условие</span>
+    <Editor v-model="form.statement_md" />
+  </div>
 
   <h3>Импорт</h3>
-  <textarea v-model="importText" placeholder='[{"exam_year_id":"...","kim_number_id":"...","difficulty":"easy","statement_md":"...","answer_spec":{"kind":"number","accepted":["1"]},"source":"seed"}]'></textarea>
+  <div class="admin-field">
+    <span>JSON для импорта</span>
+    <textarea v-model="importText" placeholder='[{"exam_year_id":"...","kim_number_id":"...","difficulty":"easy","statement_md":"...","answer_spec":{"kind":"number","accepted":["1"]},"source":"seed"}]'></textarea>
+  </div>
   <button @click="importTasks">Импортировать</button>
 
   <h3>Изображение задания</h3>
   <form class="admin-form" @submit.prevent="upload">
-    <input v-model="uploadTaskId" placeholder="ID задания" required />
-    <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" @change="uploadFile = $event.target.files[0]" />
+    <label>
+      ID задания
+      <input v-model="uploadTaskId" placeholder="ID задания" required />
+    </label>
+    <label>
+      Файл изображения
+      <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" @change="uploadFile = $event.target.files[0]" />
+    </label>
     <button type="submit">Загрузить</button>
   </form>
 
