@@ -39,11 +39,11 @@
 	"gpt-6.1-sol:cx": {
           "name": "Plusvibe GPT-6.1:cx"
         },
-	"gpt-6.1-sol:purple": {
-          "name": "Plusvibe GPT-6.1:purple"
+	"gpt-6.2-sol:purple": {
+          "name": "Plusvibe GPT-6.2:purple"
         },
-	"gpt-6.1-sol": {
-          "name": "Plusvibe GPT-6.1"
+	"gpt-6.2-sol:ruby": {
+          "name": "Plusvibe gpt-6.2-sol:ruby"
         },
 	"deepseek-v4.1-flash-1017": {
           "name": "Deepseek-v4.1-flash-1017"
