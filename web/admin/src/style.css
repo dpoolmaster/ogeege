@@ -175,6 +175,11 @@ body {
   color: var(--pico-del-color);
 }
 
+.variant-task-statement {
+  white-space: pre-wrap;
+  max-width: 48rem;
+}
+
 .theory-row {
   cursor: pointer;
 }
