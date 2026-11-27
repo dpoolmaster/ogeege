@@ -65,7 +65,10 @@ func (h *Handler) Register(router gin.IRoutes, limiter *httpserver.RateLimiter) 
 	router.GET("/hx/bank", h.BankFragment)
 	router.GET("/bank/:taskId", h.Task)
 	router.POST("/bank/:taskId/check", limited, h.CheckTask)
+	router.POST("/hx/tasks/:taskId/check", limited, h.CheckTaskFragment)
 	router.GET("/diagnostics/demo", h.Demo)
+	router.POST("/diagnostics/demo/step", limited, h.DemoStepPage)
+	router.POST("/hx/demo/step", limited, h.DemoStepFragment)
 	router.POST("/diagnostics/demo/check", limited, h.CheckDemo)
 	router.GET("/articles", h.Articles)
 	router.GET("/articles/:slug", h.Article)
@@ -86,6 +89,7 @@ func (h *Handler) Home(c *gin.Context) {
 		return
 	}
 	page.Brand = h.brand
+	page.Viewer = viewerFrom(c)
 
 	h.renderCached(c, http.StatusOK, HomePageView(page))
 }
@@ -98,6 +102,7 @@ func (h *Handler) Landing(c *gin.Context) {
 		return
 	}
 	page.Brand = h.brand
+	page.Viewer = viewerFrom(c)
 
 	h.renderCached(c, http.StatusOK, LandingView(page))
 }
@@ -110,6 +115,7 @@ func (h *Handler) Bank(c *gin.Context) {
 		return
 	}
 	page.Brand = h.brand
+	page.Viewer = viewerFrom(c)
 
 	h.renderCached(c, http.StatusOK, BankView(page))
 }
@@ -140,6 +146,7 @@ func (h *Handler) Task(c *gin.Context) {
 		return
 	}
 	page.Brand = h.brand
+	page.Viewer = viewerFrom(c)
 
 	h.renderCached(c, http.StatusOK, TaskView(page))
 }
@@ -169,8 +176,40 @@ func (h *Handler) CheckTask(c *gin.Context) {
 	}
 	page.Result = result
 	page.Brand = h.brand
+	page.Viewer = viewerFrom(c)
 
 	h.render(c, http.StatusOK, TaskView(page))
+}
+
+// CheckTaskFragment проверяет ответ на задание и возвращает HTMX-фрагмент результата.
+func (h *Handler) CheckTaskFragment(c *gin.Context) {
+	taskID, err := uuid.Parse(c.Param("taskId"))
+	if err != nil {
+		h.render(c, http.StatusNotFound, TaskCheckErrorView("Задание не найдено"))
+		return
+	}
+
+	answer := c.PostForm("answer")
+	if strings.TrimSpace(answer) == "" {
+		h.render(c, http.StatusUnprocessableEntity, TaskCheckErrorView("Введите ответ"))
+		return
+	}
+
+	result, err := h.service.CheckTask(c.Request.Context(), taskID, answer)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrUnsupported):
+			h.render(c, http.StatusUnprocessableEntity, TaskCheckErrorView("Для этого задания публичная проверка недоступна"))
+		case errors.Is(err, ErrNotFound):
+			h.render(c, http.StatusNotFound, TaskCheckErrorView("Задание не найдено"))
+		default:
+			h.logger.Error("ошибка проверки задания", "task_id", taskID, "error", err)
+			h.render(c, http.StatusInternalServerError, TaskCheckErrorView("Не удалось проверить ответ"))
+		}
+		return
+	}
+
+	h.render(c, http.StatusOK, TaskCheckResultView(result))
 }
 
 // Demo обслуживает запуск демо-диагностики.
@@ -183,6 +222,7 @@ func (h *Handler) Demo(c *gin.Context) {
 			return
 		}
 		page.Brand = h.brand
+		page.Viewer = viewerFrom(c)
 		h.render(c, http.StatusOK, DemoChoiceView(page))
 		return
 	}
@@ -195,7 +235,7 @@ func (h *Handler) Demo(c *gin.Context) {
 				h.renderError(c, http.StatusInternalServerError, "Не удалось открыть демо-диагностику")
 				return
 			}
-			h.render(c, http.StatusOK, DemoUnavailableView(page.Exams, h.brand))
+			h.render(c, http.StatusOK, DemoUnavailableView(page.Exams, h.brand, viewerFrom(c)))
 			return
 		}
 		h.handlePageError(c, err)
@@ -212,9 +252,50 @@ func (h *Handler) Demo(c *gin.Context) {
 		return
 	}
 
-	start.Brand = h.brand
 	h.setDemoCookie(c, token, int(DemoTTL.Seconds()))
-	h.render(c, http.StatusOK, DemoView(start, token))
+
+	step, err := h.service.DemoStep(c.Request.Context(), payload, nil, 1)
+	if err != nil {
+		h.renderError(c, http.StatusInternalServerError, "Не удалось открыть демо-диагностику")
+		return
+	}
+	h.render(c, http.StatusOK, DemoStepPageView(step, token, h.brand, viewerFrom(c)))
+}
+
+// DemoStepPage обслуживает полную страницу шага демо-диагностики.
+func (h *Handler) DemoStepPage(c *gin.Context) {
+	h.demoStep(c, false)
+}
+
+// DemoStepFragment обслуживает HTMX-фрагмент шага демо-диагностики.
+func (h *Handler) DemoStepFragment(c *gin.Context) {
+	h.demoStep(c, true)
+}
+
+func (h *Handler) demoStep(c *gin.Context, fragment bool) {
+	token := c.PostForm("demo_token")
+	payload, err := h.signer.Verify(token)
+	if err != nil {
+		h.renderError(c, http.StatusUnprocessableEntity, "Данные демо-диагностики истекли или изменены. Запустите её заново")
+		return
+	}
+
+	stepNumber, _ := strconv.Atoi(strings.TrimSpace(c.PostForm("step")))
+	step, err := h.service.DemoStep(c.Request.Context(), payload, demoAnswers(c), stepNumber)
+	if err != nil {
+		if errors.Is(err, ErrInvalidSession) {
+			h.renderError(c, http.StatusUnprocessableEntity, "Данные демо-диагностики истекли или изменены. Запустите её заново")
+			return
+		}
+		h.renderError(c, http.StatusInternalServerError, "Не удалось открыть шаг демо-диагностики")
+		return
+	}
+
+	if fragment {
+		h.render(c, http.StatusOK, DemoStepFormView(step, token))
+		return
+	}
+	h.render(c, http.StatusOK, DemoStepPageView(step, token, h.brand, viewerFrom(c)))
 }
 
 // CheckDemo проверяет ответы демо-диагностики.
@@ -225,12 +306,7 @@ func (h *Handler) CheckDemo(c *gin.Context) {
 		return
 	}
 
-	answers := make(map[uuid.UUID]string, len(payload.TaskIDs))
-	for _, taskID := range payload.TaskIDs {
-		answers[taskID] = c.PostForm("answer_" + taskID.String())
-	}
-
-	result, err := h.service.CheckDemo(c.Request.Context(), payload, answers)
+	result, err := h.service.CheckDemo(c.Request.Context(), payload, demoAnswers(c))
 	if err != nil {
 		if errors.Is(err, ErrInvalidSession) {
 			h.renderError(c, http.StatusUnprocessableEntity, "Данные демо-диагностики истекли или изменены. Запустите её заново")
@@ -241,7 +317,7 @@ func (h *Handler) CheckDemo(c *gin.Context) {
 	}
 
 	h.clearDemoCookie(c)
-	h.render(c, http.StatusOK, DemoResultView(result, h.brand))
+	h.render(c, http.StatusOK, DemoResultView(result, h.brand, viewerFrom(c)))
 }
 
 // Articles обслуживает список статей.
@@ -265,7 +341,7 @@ func (h *Handler) Articles(c *gin.Context) {
 		next = articles[len(articles)-1].PublishedAt.Format(time.RFC3339Nano)
 	}
 
-	h.renderCached(c, http.StatusOK, ArticlesView(articles, next, h.brand))
+	h.renderCached(c, http.StatusOK, ArticlesView(articles, next, h.brand, viewerFrom(c)))
 }
 
 // Article обслуживает страницу статьи.
@@ -276,6 +352,7 @@ func (h *Handler) Article(c *gin.Context) {
 		return
 	}
 	view.Brand = h.brand
+	view.Viewer = viewerFrom(c)
 
 	h.renderCached(c, http.StatusOK, ArticlePageView(view))
 }
@@ -313,7 +390,7 @@ func (h *Handler) submitLead(c *gin.Context, fragment bool) {
 				h.render(c, http.StatusUnprocessableEntity, leadForm("/hx/leads", source, fields, false))
 				return
 			}
-			h.render(c, http.StatusUnprocessableEntity, LeadFormView(source, fields, false, h.brand))
+			h.render(c, http.StatusUnprocessableEntity, LeadFormView(source, fields, false, h.brand, viewerFrom(c)))
 			return
 		}
 
@@ -325,7 +402,7 @@ func (h *Handler) submitLead(c *gin.Context, fragment bool) {
 		h.render(c, http.StatusOK, leadForm("/hx/leads", source, nil, true))
 		return
 	}
-	h.render(c, http.StatusOK, LeadFormView(source, nil, true, h.brand))
+	h.render(c, http.StatusOK, LeadFormView(source, nil, true, h.brand, viewerFrom(c)))
 }
 
 // Sitemap отдаёт sitemap.xml.
@@ -439,7 +516,7 @@ func (h *Handler) render(c *gin.Context, status int, component templ.Component) 
 }
 
 func (h *Handler) renderError(c *gin.Context, status int, message string) {
-	h.render(c, status, ErrorView(status, message, h.brand))
+	h.render(c, status, ErrorView(status, message, h.brand, viewerFrom(c)))
 }
 
 func (h *Handler) writeHTML(c *gin.Context, status int, body []byte, cacheable bool) {
@@ -479,6 +556,33 @@ func (h *Handler) clearDemoCookie(c *gin.Context) {
 		Secure:   h.secure,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+func viewerFrom(c *gin.Context) Viewer {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		return Viewer{}
+	}
+
+	return Viewer{SignedIn: true, Label: user.Email}
+}
+
+func demoAnswers(c *gin.Context) map[uuid.UUID]string {
+	_ = c.Request.ParseForm()
+
+	answers := make(map[uuid.UUID]string)
+	for key, values := range c.Request.PostForm {
+		if !strings.HasPrefix(key, "answer_") || len(values) == 0 {
+			continue
+		}
+		taskID, err := uuid.Parse(strings.TrimPrefix(key, "answer_"))
+		if err != nil {
+			continue
+		}
+		answers[taskID] = values[0]
+	}
+
+	return answers
 }
 
 func (h *Handler) absoluteURL(path string) string {

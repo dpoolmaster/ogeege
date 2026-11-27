@@ -11,6 +11,7 @@ templ Button(props ButtonProps) {
 			if props.Disabled {
 				tabindex="-1"
 			}
+			{ props.Attrs... }
 		>
 			{ props.Label }
 		</a>
@@ -23,6 +24,7 @@ templ Button(props ButtonProps) {
 				name={ props.Name }
 				value={ props.Value }
 			}
+			{ props.Attrs... }
 		>
 			if props.Loading {
 				<span class="v-spinner" aria-hidden="true"></span>

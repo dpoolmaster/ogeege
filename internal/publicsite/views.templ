@@ -6,7 +6,7 @@ import (
 	"oge-ege/internal/shared/render/ui"
 )
 
-templ pageLayout(seo SEOMetadata, crumbs []Breadcrumb, brand string) {
+templ pageLayout(seo SEOMetadata, crumbs []Breadcrumb, brand string, viewer Viewer) {
 	<!DOCTYPE html>
 	<html lang="ru">
 		<head>
@@ -55,8 +55,12 @@ templ pageLayout(seo SEOMetadata, crumbs []Breadcrumb, brand string) {
 							<li><a href="/bank">Банк заданий</a></li>
 							<li><a href="/diagnostics/demo">Демо-диагностика</a></li>
 							<li><a href="/articles">Статьи</a></li>
-							<li><a href="/login">Войти</a></li>
-							<li><a class="v-btn v-btn--primary v-btn--sm" href="/register">Начать</a></li>
+							if viewer.SignedIn {
+								<li><a class="v-site-header__user" href="/account" title={ viewer.Label }>{ viewer.Label }</a></li>
+							} else {
+								<li><a href="/login">Войти</a></li>
+								<li><a class="v-btn v-btn--primary v-btn--sm" href="/register">Начать</a></li>
+							}
 						</ul>
 					</nav>
 				</div>
@@ -88,7 +92,7 @@ templ pageLayout(seo SEOMetadata, crumbs []Breadcrumb, brand string) {
 }
 
 templ HomePageView(page *HomePage) {
-	@pageLayout(page.SEO, nil, page.Brand) {
+	@pageLayout(page.SEO, nil, page.Brand, page.Viewer) {
 		<section class="v-hero">
 			<div class="v-hero__text">
 				<h1>Подготовка к экзаменам</h1>
@@ -175,7 +179,7 @@ templ LandingView(page *LandingPage) {
 	@pageLayout(page.SEO, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: page.Exam.Title, Path: "/tracks/" + page.Exam.Code},
-	}, page.Brand) {
+	}, page.Brand, page.Viewer) {
 		<section class="v-hero">
 			<div class="v-hero__text">
 				<p class="v-eyebrow">Учебный трек</p>
@@ -231,6 +235,36 @@ templ LandingView(page *LandingPage) {
 				</div>
 			</section>
 		}
+		if page.Task != nil {
+			<section class="v-section" id="try-task">
+				<div class="v-section__head">
+					<h2>Попробуйте задание</h2>
+				</div>
+				<div class="v-two-col">
+					<article class="v-task-statement">
+						<div class="v-task-statement__meta">
+							@ui.Badge(ui.ToneNeutral, "Задание трека")
+						</div>
+						@templ.Raw(page.TaskHTML)
+					</article>
+					<aside class="v-answer-panel">
+						<form
+							method="post"
+							action={ "/bank/" + page.Task.ID.String() + "/check" }
+							hx-post={ "/hx/tasks/" + page.Task.ID.String() + "/check" }
+							hx-target="#landing-check-result"
+							hx-swap="innerHTML"
+							class="v-form"
+						>
+							<input type="hidden" name="csrf_token" value="__CSRF__"/>
+							@ui.Field(ui.FieldProps{Label: "Ваш ответ", Name: "answer", Autocomplete: "off", Required: true})
+							@ui.Button(ui.ButtonProps{Label: "Проверить", Type: "submit", Variant: ui.ButtonPrimary})
+						</form>
+						<div id="landing-check-result"></div>
+					</aside>
+				</div>
+			</section>
+		}
 		<section class="v-cta">
 			<div>
 				<h2>Проверьте себя на демо</h2>
@@ -245,7 +279,7 @@ templ BankView(page *BankPage) {
 	@pageLayout(page.SEO, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Банк заданий", Path: "/bank"},
-	}, page.Brand) {
+	}, page.Brand, page.Viewer) {
 		<hgroup>
 			<h1>Открытый банк заданий</h1>
 			<p>Только опубликованные задания с автоматической проверкой.</p>
@@ -315,7 +349,7 @@ templ TaskView(page *TaskPage) {
 		{Title: "Главная", Path: "/"},
 		{Title: "Банк заданий", Path: "/bank"},
 		{Title: "Задание", Path: "/bank/" + page.Task.ID.String()},
-	}, page.Brand) {
+	}, page.Brand, page.Viewer) {
 		<div class="v-task-layout">
 			<article class="v-task-statement">
 				<div class="v-task-statement__meta">
@@ -353,11 +387,26 @@ templ TaskView(page *TaskPage) {
 	}
 }
 
+templ TaskCheckResultView(result *CheckResult) {
+	@ui.ResultPanel(ui.ResultPanelProps{
+		Correct: result.Correct,
+		Text:    result.Explanation,
+	})
+}
+
+templ TaskCheckErrorView(message string) {
+	@ui.ResultPanel(ui.ResultPanelProps{
+		Correct: false,
+		Title:   "Не удалось проверить",
+		Text:    message,
+	})
+}
+
 templ DemoChoiceView(page *HomePage) {
 	@pageLayout(page.SEO, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
-	}, page.Brand) {
+	}, page.Brand, page.Viewer) {
 		<hgroup>
 			<h1>Демо-диагностика</h1>
 			<p>Выберите трек, чтобы получить 5–7 заданий и увидеть результат без регистрации.</p>
@@ -373,35 +422,98 @@ templ DemoChoiceView(page *HomePage) {
 	}
 }
 
-templ DemoView(start *DemoStart, token string) {
-	@pageLayout(start.SEO, []Breadcrumb{
+templ DemoStepPageView(step *DemoStep, token, brand string, viewer Viewer) {
+	@pageLayout(SEOMetadata{
+		Title:       "Демо-диагностика",
+		Description: "Пошаговая демо-диагностика с итогом по темам.",
+		Canonical:   "/diagnostics/demo",
+		NoIndex:     true,
+	}, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
-		{Title: start.Exam.Title, Path: "/diagnostics/demo?exam=" + start.Exam.Code},
-	}, start.Brand) {
+		{Title: "Шаг " + intString(step.Step) + " из " + intString(step.Total), Path: "/diagnostics/demo"},
+	}, brand, viewer) {
 		<hgroup>
-			<h1>Демо-диагностика: { start.Exam.Title }</h1>
-			<p>Ответьте на задания и получите итог с разбивкой по темам.</p>
+			<h1>Демо-диагностика</h1>
+			<p>Одно задание за шаг. Введённые ответы сохраняются при переходе.</p>
 		</hgroup>
-		<div class="v-demo-progress">
-			@ui.Progress(ui.ProgressProps{Value: 0, Max: len(start.Tasks), Label: "Заполнено"})
+		<div id="demo-step">
+			@demoStepForm(step, token)
 		</div>
-		<form method="post" action="/diagnostics/demo/check" class="v-form v-demo-form" data-demo-form>
-			<input type="hidden" name="csrf_token" value="__CSRF__"/>
-			<input type="hidden" name="demo_token" value={ token }/>
-			for i, task := range start.Tasks {
-				<article class="v-card v-demo-task" data-demo-task>
-					<h2>Задание { i + 1 }</h2>
-					<p>{ task.StatementMD }</p>
-					@ui.Field(ui.FieldProps{Label: "Ответ", Name: "answer_" + task.ID.String(), Autocomplete: "off"})
-				</article>
-			}
-			@ui.Button(ui.ButtonProps{Label: "Завершить диагностику", Type: "submit", Variant: ui.ButtonPrimary})
-		</form>
 	}
 }
 
-templ DemoResultView(result *DemoResult, brand string) {
+templ DemoStepFormView(step *DemoStep, token string) {
+	@demoStepForm(step, token)
+}
+
+templ demoStepForm(step *DemoStep, token string) {
+	<form method="post" action="/diagnostics/demo/step" class="v-form v-demo-form">
+		<input type="hidden" name="csrf_token" value="__CSRF__"/>
+		<input type="hidden" name="demo_token" value={ token }/>
+		<div class="v-demo-progress">
+			@ui.Progress(ui.ProgressProps{Value: step.Step, Max: step.Total, Label: "Шаг"})
+			<small>Заполнено: { intString(step.Filled) } из { intString(step.Total) }</small>
+		</div>
+		<article class="v-card v-demo-task">
+			<h2 id="demo-step-title" data-autofocus tabindex="-1">Задание { intString(step.Step) } из { intString(step.Total) }</h2>
+			@templ.Raw(step.TaskHTML)
+			@ui.Field(ui.FieldProps{Label: "Ответ", Name: "answer_" + step.Task.ID.String(), Value: step.Answers[step.Task.ID], Autocomplete: "off"})
+		</article>
+		for _, taskID := range step.TaskIDs {
+			if taskID != step.Task.ID {
+				<input type="hidden" name={ "answer_" + taskID.String() } value={ step.Answers[taskID] }/>
+			}
+		}
+		<div class="v-actions">
+			if step.Step > 1 {
+				@ui.Button(ui.ButtonProps{
+					Label:   "Назад",
+					Type:    "submit",
+					Variant: ui.ButtonSecondary,
+					Name:    "step",
+					Value:   intString(step.Step - 1),
+					Attrs: templ.Attributes{
+						"formaction": "/diagnostics/demo/step",
+						"hx-post":    "/hx/demo/step",
+						"hx-vals":    `{"step":"` + intString(step.Step-1) + `"}`,
+						"hx-include": "closest form",
+						"hx-target":  "#demo-step",
+						"hx-swap":    "innerHTML",
+					},
+				})
+			}
+			if step.Step < step.Total {
+				@ui.Button(ui.ButtonProps{
+					Label:   "Далее",
+					Type:    "submit",
+					Variant: ui.ButtonPrimary,
+					Name:    "step",
+					Value:   intString(step.Step + 1),
+					Attrs: templ.Attributes{
+						"formaction": "/diagnostics/demo/step",
+						"hx-post":    "/hx/demo/step",
+						"hx-vals":    `{"step":"` + intString(step.Step+1) + `"}`,
+						"hx-include": "closest form",
+						"hx-target":  "#demo-step",
+						"hx-swap":    "innerHTML",
+					},
+				})
+			} else {
+				@ui.Button(ui.ButtonProps{
+					Label:   "Завершить",
+					Type:    "submit",
+					Variant: ui.ButtonPrimary,
+					Attrs: templ.Attributes{
+						"formaction": "/diagnostics/demo/check",
+					},
+				})
+			}
+		</div>
+	</form>
+}
+
+templ DemoResultView(result *DemoResult, brand string, viewer Viewer) {
 	@pageLayout(SEOMetadata{
 		Title:       "Результат демо-диагностики",
 		Description: "Итог демо-диагностики и разбивка по темам.",
@@ -411,7 +523,7 @@ templ DemoResultView(result *DemoResult, brand string) {
 		{Title: "Главная", Path: "/"},
 		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
 		{Title: "Результат", Path: "/diagnostics/demo"},
-	}, brand) {
+	}, brand, viewer) {
 		<hgroup>
 			<h1>Результат демо-диагностики</h1>
 			<p>Верно { result.Correct } из { result.Total }.</p>
@@ -431,7 +543,7 @@ templ DemoResultView(result *DemoResult, brand string) {
 	}
 }
 
-templ ArticlesView(articles []Article, next string, brand string) {
+templ ArticlesView(articles []Article, next string, brand string, viewer Viewer) {
 	@pageLayout(SEOMetadata{
 		Title:       "Статьи и разборы",
 		Description: "Публикации о подготовке к экзаменам.",
@@ -439,7 +551,7 @@ templ ArticlesView(articles []Article, next string, brand string) {
 	}, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Статьи", Path: "/articles"},
-	}, brand) {
+	}, brand, viewer) {
 		<hgroup>
 			<h1>Статьи и разборы</h1>
 			<p>Материалы о подготовке к экзаменам.</p>
@@ -466,7 +578,7 @@ templ ArticlesView(articles []Article, next string, brand string) {
 }
 
 templ ArticlePageView(view *ArticleView) {
-	@pageLayout(view.SEO, view.Breadcrumbs, view.Brand) {
+	@pageLayout(view.SEO, view.Breadcrumbs, view.Brand, view.Viewer) {
 		<article class="v-prose">
 			<h1>{ view.Article.Title }</h1>
 			if view.Article.Excerpt != "" {
@@ -497,7 +609,7 @@ templ leadForm(action, source string, fieldErrors map[string]string, success boo
 	</form>
 }
 
-templ LeadFormView(source string, fieldErrors map[string]string, success bool, brand string) {
+templ LeadFormView(source string, fieldErrors map[string]string, success bool, brand string, viewer Viewer) {
 	@pageLayout(SEOMetadata{
 		Title:       "Оставить заявку",
 		Description: "Заявка на подготовку к экзаменам.",
@@ -506,7 +618,7 @@ templ LeadFormView(source string, fieldErrors map[string]string, success bool, b
 	}, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Заявка", Path: "/leads"},
-	}, brand) {
+	}, brand, viewer) {
 		<hgroup>
 			<h1>Оставить заявку</h1>
 			<p>Мы свяжемся с вами и поможем выбрать программу.</p>
@@ -517,14 +629,14 @@ templ LeadFormView(source string, fieldErrors map[string]string, success bool, b
 	}
 }
 
-templ ErrorView(status int, message string, brand string) {
+templ ErrorView(status int, message string, brand string, viewer Viewer) {
 	@pageLayout(SEOMetadata{
 		Title:   message,
 		NoIndex: true,
 	}, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: message, Path: "/"},
-	}, brand) {
+	}, brand, viewer) {
 		<hgroup>
 			<h1>{ intString(status) }</h1>
 		</hgroup>
@@ -538,7 +650,7 @@ templ ErrorView(status int, message string, brand string) {
 	}
 }
 
-templ DemoUnavailableView(exams []content.Exam, brand string) {
+templ DemoUnavailableView(exams []content.Exam, brand string, viewer Viewer) {
 	@pageLayout(SEOMetadata{
 		Title:       "Демо-диагностика",
 		Description: "Для выбранного трека пока недостаточно заданий.",
@@ -547,7 +659,7 @@ templ DemoUnavailableView(exams []content.Exam, brand string) {
 	}, []Breadcrumb{
 		{Title: "Главная", Path: "/"},
 		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
-	}, brand) {
+	}, brand, viewer) {
 		<hgroup>
 			<h1>Демо-диагностика</h1>
 		</hgroup>

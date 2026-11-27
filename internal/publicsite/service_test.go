@@ -38,6 +38,7 @@ type fakeRepo struct {
 	leads      []Lead
 	listCalls  int
 	lastCursor *time.Time
+	writes     int
 }
 
 func (r *fakeRepo) GetArticleBySlug(_ context.Context, _ db.Querier, slug string) (*Article, error) {
@@ -57,7 +58,33 @@ func (r *fakeRepo) ListPublishedArticles(_ context.Context, _ db.Querier, cursor
 }
 
 func (r *fakeRepo) CreateLead(_ context.Context, _ db.Querier, lead *Lead) error {
+	r.writes++
 	r.leads = append(r.leads, *lead)
+	return nil
+}
+
+func (r *fakeRepo) CreateArticle(_ context.Context, _ db.Querier, _ *Article) error {
+	r.writes++
+	return nil
+}
+
+func (r *fakeRepo) UpdateArticle(_ context.Context, _ db.Querier, _ *Article) error {
+	r.writes++
+	return nil
+}
+
+func (r *fakeRepo) UpsertArticle(_ context.Context, _ db.Querier, _ *Article) error {
+	r.writes++
+	return nil
+}
+
+func (r *fakeRepo) UpsertSEOPage(_ context.Context, _ db.Querier, _ *SEOPage) error {
+	r.writes++
+	return nil
+}
+
+func (r *fakeRepo) UpsertRedirect(_ context.Context, _ db.Querier, _ *Redirect) error {
+	r.writes++
 	return nil
 }
 
@@ -102,6 +129,8 @@ type fakeContent struct {
 	attaches  []content.TaskAttachment
 	lastTaskF content.TaskFilter
 	demoCalls int
+	taskCalls int
+	kimByID   map[uuid.UUID]content.KimNumber
 }
 
 func (c *fakeContent) GetExamByCode(_ context.Context, _ string) (*content.Exam, error) {
@@ -125,6 +154,9 @@ func (c *fakeContent) ListKimNumbers(_ context.Context, _ content.KimNumberFilte
 }
 
 func (c *fakeContent) GetKimNumber(_ context.Context, id uuid.UUID) (*content.KimNumber, error) {
+	if kim, ok := c.kimByID[id]; ok {
+		return &kim, nil
+	}
 	if c.kim != nil && c.kim.ID == id {
 		return c.kim, nil
 	}
@@ -167,6 +199,7 @@ func (c *fakeContent) ListDemoTasks(_ context.Context, _ uuid.UUID, _ int) ([]co
 }
 
 func (c *fakeContent) GetTask(_ context.Context, id uuid.UUID) (*content.Task, error) {
+	c.taskCalls++
 	if c.task != nil && c.task.ID == id {
 		return c.task, nil
 	}
@@ -556,5 +589,185 @@ func TestCache(t *testing.T) {
 	cache.Set("/c", []byte("c"))
 	if _, ok := cache.Get("/a"); ok {
 		t.Fatal("самая старая запись должна вытесняться")
+	}
+}
+
+func TestLandingTaskSelection(t *testing.T) {
+	examID := uuid.Must(uuid.NewV7())
+	kimOne := content.KimNumber{ID: uuid.Must(uuid.NewV7()), Number: 1}
+	kimTwo := content.KimNumber{ID: uuid.Must(uuid.NewV7()), Number: 2}
+	taskTwo := content.Task{
+		ID: uuid.Must(uuid.NewV7()), KimNumberID: kimTwo.ID, Status: content.StatusPublished, IsPublic: true,
+		AnswerSpec: json.RawMessage(`{"kind":"number","accepted":["2"]}`),
+	}
+	taskOne := content.Task{
+		ID: uuid.Must(uuid.NewV7()), KimNumberID: kimOne.ID, Status: content.StatusPublished, IsPublic: true,
+		AnswerSpec: json.RawMessage(`{"kind":"number","accepted":["1"]}`),
+	}
+	draft := content.Task{
+		ID: uuid.Must(uuid.NewV7()), KimNumberID: kimOne.ID, Status: content.StatusDraft, IsPublic: true,
+		AnswerSpec: json.RawMessage(`{"kind":"number","accepted":["1"]}`),
+	}
+	private := content.Task{
+		ID: uuid.Must(uuid.NewV7()), KimNumberID: kimOne.ID, Status: content.StatusPublished, IsPublic: false,
+		AnswerSpec: json.RawMessage(`{"kind":"number","accepted":["1"]}`),
+	}
+	unsupported := content.Task{
+		ID: uuid.Must(uuid.NewV7()), KimNumberID: kimOne.ID, Status: content.StatusPublished, IsPublic: true,
+		AnswerSpec: json.RawMessage(`{"kind":"choice","accepted":["1"]}`),
+	}
+
+	tests := []struct {
+		name  string
+		tasks []content.Task
+		want  uuid.UUID
+	}{
+		{name: "выбирает задание с меньшим номером КИМ", tasks: []content.Task{taskTwo, taskOne}, want: taskOne.ID},
+		{name: "пропускает черновик", tasks: []content.Task{draft, taskOne}, want: taskOne.ID},
+		{name: "пропускает приватное", tasks: []content.Task{private, taskOne}, want: taskOne.ID},
+		{name: "пропускает неподдерживаемый тип", tasks: []content.Task{unsupported, taskTwo}, want: taskTwo.ID},
+		{name: "заданий нет", tasks: nil, want: uuid.Nil},
+		{name: "только недоступные", tasks: []content.Task{draft, private, unsupported}, want: uuid.Nil},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			provider := &fakeContent{
+				tasks:   test.tasks,
+				kimByID: map[uuid.UUID]content.KimNumber{kimOne.ID: kimOne, kimTwo.ID: kimTwo},
+			}
+			service := newTestService(&fakeRepo{}, provider, fakeRecipients{}, &fakeNotifier{})
+
+			task, err := service.landingTask(context.Background(), examID, nil)
+			if err != nil {
+				t.Fatalf("неожиданная ошибка: %v", err)
+			}
+			if test.want == uuid.Nil {
+				if task != nil {
+					t.Fatalf("ожидалось отсутствие задания, получено %+v", task)
+				}
+				return
+			}
+			if task == nil || task.ID != test.want {
+				t.Fatalf("выбрано %+v, ожидалось %s", task, test.want)
+			}
+		})
+	}
+}
+
+func TestDemoStepParsing(t *testing.T) {
+	topicID := uuid.Must(uuid.NewV7())
+	tasks := make([]content.Task, 0, 3)
+	ids := make([]uuid.UUID, 0, 3)
+	for i := 0; i < 3; i++ {
+		task := content.Task{
+			ID: uuid.Must(uuid.NewV7()), Status: content.StatusPublished, IsPublic: true,
+			TopicID: &topicID, StatementMD: "Задание", AnswerSpec: json.RawMessage(`{"kind":"number","accepted":["2"]}`),
+		}
+		tasks = append(tasks, task)
+		ids = append(ids, task.ID)
+	}
+	provider := &taskProvider{
+		tasks: map[uuid.UUID]content.Task{tasks[0].ID: tasks[0], tasks[1].ID: tasks[1], tasks[2].ID: tasks[2]},
+		topic: content.Topic{ID: topicID, Title: "Алгебра"},
+	}
+	service := newTestService(&fakeRepo{}, provider, fakeRecipients{}, &fakeNotifier{})
+	unknown := uuid.Must(uuid.NewV7())
+	payload := &DemoPayload{TaskIDs: ids}
+	answers := map[uuid.UUID]string{ids[0]: " 2 ", ids[1]: " ", unknown: "9"}
+
+	tests := []struct {
+		name     string
+		step     int
+		wantStep int
+		wantTask uuid.UUID
+	}{
+		{name: "ниже диапазона", step: 0, wantStep: 1, wantTask: ids[0]},
+		{name: "в диапазоне", step: 2, wantStep: 2, wantTask: ids[1]},
+		{name: "выше диапазона", step: 99, wantStep: 3, wantTask: ids[2]},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			step, err := service.DemoStep(context.Background(), payload, answers, test.step)
+			if err != nil {
+				t.Fatalf("неожиданная ошибка: %v", err)
+			}
+			if step.Step != test.wantStep || step.Task.ID != test.wantTask {
+				t.Fatalf("шаг = %+v, ожидался шаг %d с заданием %s", step, test.wantStep, test.wantTask)
+			}
+			if step.Total != len(ids) || step.Filled != 1 {
+				t.Fatalf("прогресс = %+v", step)
+			}
+			if _, ok := step.Answers[unknown]; ok {
+				t.Fatal("ответ вне токена попал в состояние шага")
+			}
+			if len(step.Answers) != len(ids) {
+				t.Fatalf("в состоянии шага %d ответов, ожидалось %d", len(step.Answers), len(ids))
+			}
+		})
+	}
+
+	if _, err := service.DemoStep(context.Background(), nil, nil, 1); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("пустой токен должен отклоняться, получено %v", err)
+	}
+	if _, err := service.DemoStep(context.Background(), &DemoPayload{TaskIDs: []uuid.UUID{unknown}}, nil, 1); !errors.Is(err, ErrInvalidSession) {
+		t.Fatalf("неизвестное задание должно отклоняться, получено %v", err)
+	}
+}
+
+func TestDemoIgnoresAnswersOutsideToken(t *testing.T) {
+	topicID := uuid.Must(uuid.NewV7())
+	task := content.Task{
+		ID: uuid.Must(uuid.NewV7()), Status: content.StatusPublished, IsPublic: true,
+		TopicID: &topicID, AnswerSpec: json.RawMessage(`{"kind":"number","accepted":["2"]}`),
+	}
+	provider := &taskProvider{tasks: map[uuid.UUID]content.Task{task.ID: task}, topic: content.Topic{ID: topicID, Title: "Алгебра"}}
+	service := newTestService(&fakeRepo{}, provider, fakeRecipients{}, &fakeNotifier{})
+	unknown := uuid.Must(uuid.NewV7())
+
+	result, err := service.CheckDemo(context.Background(), &DemoPayload{TaskIDs: []uuid.UUID{task.ID}}, map[uuid.UUID]string{
+		task.ID: "2",
+		unknown: "9",
+	})
+	if err != nil {
+		t.Fatalf("неожиданная ошибка: %v", err)
+	}
+	if result.Total != 1 || result.Correct != 1 {
+		t.Fatalf("ответ вне токена повлиял на результат: %+v", result)
+	}
+}
+
+func TestLandingAndDemoDoNotWrite(t *testing.T) {
+	exam := content.Exam{ID: uuid.Must(uuid.NewV7()), Code: "oge_math", Title: "ОГЭ математика", Status: content.StatusPublished}
+	year := content.ExamYear{ID: uuid.Must(uuid.NewV7()), ExamID: exam.ID, Year: 2026, Status: content.StatusPublished}
+	kim := content.KimNumber{ID: uuid.Must(uuid.NewV7()), Number: 1}
+	task := content.Task{
+		ID: uuid.Must(uuid.NewV7()), KimNumberID: kim.ID, Status: content.StatusPublished, IsPublic: true,
+		StatementMD: "Вычислите", AnswerSpec: json.RawMessage(`{"kind":"number","accepted":["2"]}`),
+	}
+	repo := &fakeRepo{}
+	provider := &fakeContent{
+		exam:    &exam,
+		year:    &year,
+		kim:     &kim,
+		tasks:   []content.Task{task},
+		task:    &task,
+		kimByID: map[uuid.UUID]content.KimNumber{kim.ID: kim},
+	}
+	service := newTestService(repo, provider, fakeRecipients{}, &fakeNotifier{})
+
+	if _, err := service.Landing(context.Background(), "oge_math"); err != nil {
+		t.Fatalf("лендинг: %v", err)
+	}
+	payload := &DemoPayload{TaskIDs: []uuid.UUID{task.ID}}
+	if _, err := service.DemoStep(context.Background(), payload, nil, 1); err != nil {
+		t.Fatalf("шаг демо: %v", err)
+	}
+	if _, err := service.CheckDemo(context.Background(), payload, map[uuid.UUID]string{task.ID: "2"}); err != nil {
+		t.Fatalf("итог демо: %v", err)
+	}
+	if repo.writes != 0 {
+		t.Fatalf("новые сценарии записали в БД %d раз", repo.writes)
 	}
 }

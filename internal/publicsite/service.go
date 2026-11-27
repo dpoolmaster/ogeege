@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -126,6 +128,8 @@ type LandingPage struct {
 	Year       *content.ExamYear
 	KimNumbers []content.KimNumber
 	Topics     []content.Topic
+	Task       *content.Task
+	TaskHTML   string
 	SEO        SEOMetadata
 }
 
@@ -176,12 +180,19 @@ type CheckResult struct {
 
 // DemoStart — данные запуска демо-диагностики.
 type DemoStart struct {
-	Brand  string
-	Viewer Viewer
-	Exam   content.Exam
-	Year   content.ExamYear
-	Tasks  []content.Task
-	SEO    SEOMetadata
+	Year  content.ExamYear
+	Tasks []content.Task
+}
+
+// DemoStep — состояние одного шага демо-диагностики.
+type DemoStep struct {
+	Step     int
+	Total    int
+	Task     content.Task
+	TaskHTML string
+	TaskIDs  []uuid.UUID
+	Answers  map[uuid.UUID]string
+	Filled   int
 }
 
 // TopicResult — разбивка результата демо по теме.
@@ -261,9 +272,75 @@ func (s *Service) Landing(ctx context.Context, code string) (*LandingPage, error
 		return nil, err
 	}
 
+	task, err := s.landingTask(ctx, exam.ID, page.KimNumbers)
+	if err != nil {
+		return nil, err
+	}
+	if task != nil {
+		page.Task = task
+		page.TaskHTML, err = markdown.Render(task.StatementMD)
+		if err != nil {
+			return nil, fmt.Errorf("отрендерить задание лендинга: %w", err)
+		}
+	}
+
 	page.SEO = s.seoFor(ctx, "/tracks/"+exam.Code, exam.Title, "Подготовка к экзамену: структура, темы и демо-диагностика.")
 
 	return page, nil
+}
+
+// landingTask выбирает первое опубликованное задание трека с автоматической проверкой.
+func (s *Service) landingTask(ctx context.Context, examID uuid.UUID, kimNumbers []content.KimNumber) (*content.Task, error) {
+	tasks, err := s.content.ListPublicTasks(ctx, content.TaskFilter{
+		ExamID:               &examID,
+		Kinds:                supportedKinds(),
+		ExcludePublishedMock: true,
+		Limit:                200,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	numbers := make(map[uuid.UUID]int, len(kimNumbers))
+	for _, kim := range kimNumbers {
+		numbers[kim.ID] = kim.Number
+	}
+
+	candidates := make([]content.Task, 0, len(tasks))
+	for _, task := range tasks {
+		if task.Status != content.StatusPublished || !task.IsPublic {
+			continue
+		}
+		kind, err := answerKind(task.AnswerSpec)
+		if err != nil || !grading.Supports(kind) {
+			continue
+		}
+		if _, ok := numbers[task.KimNumberID]; !ok {
+			kim, err := s.content.GetKimNumber(ctx, task.KimNumberID)
+			if err == nil {
+				numbers[kim.ID] = kim.Number
+			} else if !errors.Is(err, content.ErrNotFound) {
+				return nil, err
+			} else {
+				numbers[task.KimNumberID] = math.MaxInt
+			}
+		}
+		candidates = append(candidates, task)
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		left, right := numbers[candidates[i].KimNumberID], numbers[candidates[j].KimNumberID]
+		if left != right {
+			return left < right
+		}
+
+		return candidates[i].ID.String() < candidates[j].ID.String()
+	})
+
+	return &candidates[0], nil
 }
 
 // Bank возвращает страницу публичного банка заданий.
@@ -486,10 +563,53 @@ func (s *Service) StartDemo(ctx context.Context, examCode string) (*DemoStart, e
 	}
 
 	return &DemoStart{
-		Exam:  *exam,
 		Year:  *year,
 		Tasks: tasks,
-		SEO:   s.seoFor(ctx, "/diagnostics/demo", "Демо-диагностика", "Пройдите демо-диагностику без регистрации."),
+	}, nil
+}
+
+// DemoStep возвращает состояние одного шага демо-диагностики.
+// Ответы вне подписанного токена отбрасываются, шаг ограничивается диапазоном.
+func (s *Service) DemoStep(ctx context.Context, payload *DemoPayload, answers map[uuid.UUID]string, step int) (*DemoStep, error) {
+	if payload == nil || len(payload.TaskIDs) == 0 {
+		return nil, ErrInvalidSession
+	}
+
+	total := len(payload.TaskIDs)
+	if step < 1 {
+		step = 1
+	}
+	if step > total {
+		step = total
+	}
+
+	filtered := make(map[uuid.UUID]string, total)
+	filled := 0
+	for _, taskID := range payload.TaskIDs {
+		value := strings.TrimSpace(answers[taskID])
+		filtered[taskID] = value
+		if value != "" {
+			filled++
+		}
+	}
+
+	task, err := s.publicTask(ctx, payload.TaskIDs[step-1])
+	if err != nil {
+		return nil, ErrInvalidSession
+	}
+	taskHTML, err := markdown.Render(task.StatementMD)
+	if err != nil {
+		return nil, fmt.Errorf("отрендерить задание демо: %w", err)
+	}
+
+	return &DemoStep{
+		Step:     step,
+		Total:    total,
+		Task:     *task,
+		TaskHTML: taskHTML,
+		TaskIDs:  append([]uuid.UUID(nil), payload.TaskIDs...),
+		Answers:  filtered,
+		Filled:   filled,
 	}, nil
 }
 

@@ -54,6 +54,7 @@ type ButtonProps struct {
 	Loading  bool
 	Name     string
 	Value    string
+	Attrs    templ.Attributes
 }
 
 func (p ButtonProps) buttonType() string {

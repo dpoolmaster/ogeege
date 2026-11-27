@@ -464,3 +464,253 @@ func (p *countingProvider) GetExamByCode(ctx context.Context, code string) (*con
 	p.calls++
 	return p.fakeContent.GetExamByCode(ctx, code)
 }
+
+func landingFixture(t *testing.T) (*handlerFixture, content.Task) {
+	t.Helper()
+
+	exam := publishedExam()
+	year := content.ExamYear{ID: uuid.Must(uuid.NewV7()), ExamID: exam.ID, Year: 2026, Status: content.StatusPublished}
+	kim := content.KimNumber{ID: uuid.Must(uuid.NewV7()), ExamYearID: year.ID, Number: 1}
+	task := publishedTask()
+	task.KimNumberID = kim.ID
+	task.StatementMD = "Вычислите 1 + 1"
+	fixture := newFixture(&fakeRepo{}, &fakeContent{
+		exam:    &exam,
+		year:    &year,
+		kimList: []content.KimNumber{kim},
+		kimByID: map[uuid.UUID]content.KimNumber{kim.ID: kim},
+		tasks:   []content.Task{task},
+		task:    &task,
+	}, fakeRecipients{}, &fakeNotifier{})
+
+	return fixture, task
+}
+
+func TestHandlerLandingCheckBlockAndFragment(t *testing.T) {
+	fixture, task := landingFixture(t)
+
+	rec := perform(fixture.router, http.MethodGet, "/tracks/oge_math", nil, nil)
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(body, "Попробуйте задание") {
+		t.Fatalf("блок проверки на лендинге: %d %s", rec.Code, body)
+	}
+	for _, part := range []string{
+		`action="/bank/` + task.ID.String() + `/check"`,
+		`hx-post="/hx/tasks/` + task.ID.String() + `/check"`,
+		`hx-target="#landing-check-result"`,
+		`name="csrf_token"`,
+	} {
+		if !strings.Contains(body, part) {
+			t.Fatalf("форма проверки не содержит %q", part)
+		}
+	}
+	if strings.Contains(body, "__CSRF__") {
+		t.Fatal("CSRF-плейсхолдер не подставлен")
+	}
+
+	csrf := csrfFrom(rec)
+	form := url.Values{"csrf_token": {csrf}, "answer": {"2"}}
+	rec = perform(fixture.router, http.MethodPost, "/hx/tasks/"+task.ID.String()+"/check", form, map[string]string{"csrf_token": csrf})
+	body = rec.Body.String()
+	if rec.Code != http.StatusOK || strings.Contains(body, "<html") {
+		t.Fatalf("фрагмент верного ответа: %d %s", rec.Code, body)
+	}
+	if !strings.Contains(body, `role="status"`) || !strings.Contains(body, "Верно") {
+		t.Fatalf("верный ответ не объявлен: %s", body)
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("фрагмент проверки закэширован: %q", rec.Header().Get("Cache-Control"))
+	}
+
+	form.Set("answer", "3")
+	rec = perform(fixture.router, http.MethodPost, "/hx/tasks/"+task.ID.String()+"/check", form, map[string]string{"csrf_token": csrf})
+	body = rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(body, `role="alert"`) || !strings.Contains(body, "Неверно") || !strings.Contains(body, "Правильный ответ: 2") {
+		t.Fatalf("неверный ответ: %d %s", rec.Code, body)
+	}
+
+	form.Set("answer", " ")
+	rec = perform(fixture.router, http.MethodPost, "/hx/tasks/"+task.ID.String()+"/check", form, map[string]string{"csrf_token": csrf})
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "Введите ответ") {
+		t.Fatalf("пустой ответ: %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec = perform(fixture.router, http.MethodPost, "/hx/tasks/"+task.ID.String()+"/check", url.Values{"answer": {"2"}}, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("без CSRF: %d", rec.Code)
+	}
+
+	unsupported := task
+	unsupported.AnswerSpec = json.RawMessage(`{"kind":"choice","accepted":["2"]}`)
+	fixture = newFixture(&fakeRepo{}, &fakeContent{task: &unsupported}, fakeRecipients{}, &fakeNotifier{})
+	rec = perform(fixture.router, http.MethodGet, "/", nil, nil)
+	csrf = csrfFrom(rec)
+	rec = perform(fixture.router, http.MethodPost, "/hx/tasks/"+task.ID.String()+"/check", url.Values{"csrf_token": {csrf}, "answer": {"2"}}, map[string]string{"csrf_token": csrf})
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "недоступна") {
+		t.Fatalf("неподдерживаемый тип: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerLandingWithoutTask(t *testing.T) {
+	exam := publishedExam()
+	year := content.ExamYear{ID: uuid.Must(uuid.NewV7()), ExamID: exam.ID, Year: 2026, Status: content.StatusPublished}
+	fixture := newFixture(&fakeRepo{}, &fakeContent{exam: &exam, year: &year}, fakeRecipients{}, &fakeNotifier{})
+
+	rec := perform(fixture.router, http.MethodGet, "/tracks/oge_math", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("лендинг без задания: %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "Попробуйте задание") {
+		t.Fatal("блок проверки показан без задания")
+	}
+}
+
+func demoFixture(t *testing.T) (*handlerFixture, []content.Task) {
+	t.Helper()
+
+	exam := publishedExam()
+	year := content.ExamYear{ID: uuid.Must(uuid.NewV7()), ExamID: exam.ID, Year: 2026, Status: content.StatusPublished}
+	tasks := make([]content.Task, 0, 5)
+	for i := 0; i < 5; i++ {
+		task := publishedTask()
+		task.StatementMD = "Задание " + task.ID.String()
+		tasks = append(tasks, task)
+	}
+	fixture := newFixture(&fakeRepo{}, &fakeContent{exam: &exam, year: &year, tasks: tasks}, fakeRecipients{}, &fakeNotifier{})
+
+	return fixture, tasks
+}
+
+func demoToken(rec *httptest.ResponseRecorder) string {
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == DemoCookieName {
+			return cookie.Value
+		}
+	}
+
+	return ""
+}
+
+func TestHandlerDemoStepFlow(t *testing.T) {
+	fixture, tasks := demoFixture(t)
+
+	rec := perform(fixture.router, http.MethodGet, "/diagnostics/demo?exam=oge_math", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("запуск демо: %d", rec.Code)
+	}
+	token := demoToken(rec)
+	csrf := csrfFrom(rec)
+	body := rec.Body.String()
+	if token == "" || csrf == "" {
+		t.Fatal("демо не выдало токен или CSRF")
+	}
+	for _, part := range []string{`id="demo-step"`, `data-autofocus`, "Шаг", "1 из 5", tasks[0].StatementMD} {
+		if !strings.Contains(body, part) {
+			t.Fatalf("первый шаг не содержит %q: %s", part, body)
+		}
+	}
+	if strings.Contains(body, tasks[1].StatementMD) {
+		t.Fatal("на первом шаге показано второе задание")
+	}
+
+	form := url.Values{
+		"csrf_token":                     {csrf},
+		"demo_token":                     {token},
+		"step":                           {"2"},
+		"answer_" + tasks[0].ID.String(): {"2"},
+	}
+	rec = perform(fixture.router, http.MethodPost, "/hx/demo/step", form, map[string]string{"csrf_token": csrf, DemoCookieName: token})
+	body = rec.Body.String()
+	if rec.Code != http.StatusOK || strings.Contains(body, "<html") {
+		t.Fatalf("фрагмент шага: %d %s", rec.Code, body)
+	}
+	if !strings.Contains(body, tasks[1].StatementMD) || !strings.Contains(body, `name="answer_`+tasks[0].ID.String()+`" value="2"`) {
+		t.Fatalf("второй шаг не сохранил ответ: %s", body)
+	}
+
+	form.Set("step", "1")
+	form.Set("answer_"+tasks[1].ID.String(), "3")
+	rec = perform(fixture.router, http.MethodPost, "/diagnostics/demo/step", form, map[string]string{"csrf_token": csrf, DemoCookieName: token})
+	body = rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(body, tasks[0].StatementMD) || !strings.Contains(body, `value="2"`) {
+		t.Fatalf("возврат назад не сохранил ответ: %d %s", rec.Code, body)
+	}
+
+	form.Set("step", "99")
+	rec = perform(fixture.router, http.MethodPost, "/hx/demo/step", form, map[string]string{"csrf_token": csrf, DemoCookieName: token})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), tasks[4].StatementMD) {
+		t.Fatalf("шаг вне диапазона не ограничен: %d %s", rec.Code, rec.Body.String())
+	}
+
+	checkForm := url.Values{"csrf_token": {csrf}, "demo_token": {token}}
+	for i, task := range tasks {
+		checkForm.Set("answer_"+task.ID.String(), []string{"2", "3", "2", "3", "2"}[i])
+	}
+	rec = perform(fixture.router, http.MethodPost, "/diagnostics/demo/check", checkForm, map[string]string{"csrf_token": csrf, DemoCookieName: token})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Результат демо-диагностики") || !strings.Contains(rec.Body.String(), "Верно 3 из 5") {
+		t.Fatalf("итог демо: %d %s", rec.Code, rec.Body.String())
+	}
+
+	form.Set("demo_token", token+"x")
+	rec = perform(fixture.router, http.MethodPost, "/hx/demo/step", form, map[string]string{"csrf_token": csrf})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("изменённый токен шага: %d", rec.Code)
+	}
+}
+
+func TestHandlerDemoStepMissingCSRF(t *testing.T) {
+	fixture, tasks := demoFixture(t)
+	rec := perform(fixture.router, http.MethodGet, "/diagnostics/demo?exam=oge_math", nil, nil)
+	token := demoToken(rec)
+
+	rec = perform(fixture.router, http.MethodPost, "/hx/demo/step", url.Values{
+		"demo_token":                     {token},
+		"step":                           {"2"},
+		"answer_" + tasks[0].ID.String(): {"2"},
+	}, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("без CSRF: %d", rec.Code)
+	}
+}
+
+func TestHandlerFragmentsAreNotCached(t *testing.T) {
+	fixture, task := landingFixture(t)
+	provider := fixture.handler.service.content.(*fakeContent)
+
+	rec := perform(fixture.router, http.MethodGet, "/tracks/oge_math", nil, nil)
+	csrf := csrfFrom(rec)
+	form := url.Values{"csrf_token": {csrf}, "answer": {"2"}}
+	before := provider.taskCalls
+	perform(fixture.router, http.MethodPost, "/hx/tasks/"+task.ID.String()+"/check", form, map[string]string{"csrf_token": csrf})
+	perform(fixture.router, http.MethodPost, "/hx/tasks/"+task.ID.String()+"/check", form, map[string]string{"csrf_token": csrf})
+	if provider.taskCalls-before != 2 {
+		t.Fatalf("фрагмент проверки взят из кэша: вызовов %d", provider.taskCalls-before)
+	}
+}
+
+func TestHandlerCheckFragmentRateLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	exam := publishedExam()
+	year := content.ExamYear{ID: uuid.Must(uuid.NewV7()), ExamID: exam.ID, Year: 2026, Status: content.StatusPublished}
+	kim := content.KimNumber{ID: uuid.Must(uuid.NewV7()), ExamYearID: year.ID, Number: 1}
+	task := publishedTask()
+	task.KimNumberID = kim.ID
+	service := NewService(&fakeRepo{}, nil, testTx{}, &testClock{now: time.Now()}, &fakeContent{
+		exam: &exam, year: &year, tasks: []content.Task{task}, task: &task,
+		kimByID: map[uuid.UUID]content.KimNumber{kim.ID: kim},
+	}, fakeRecipients{}, &fakeNotifier{}, testLogger())
+	csrf := httpserver.NewCSRF("secret", false, nil)
+	handler := NewHandler(service, csrf, NewDemoSigner("secret", DemoTTL, &testClock{now: time.Now()}), NewCache(time.Minute, 10), testLogger(), false, "https://example.ru", "Верно")
+	router := gin.New()
+	router.Use(csrf.Middleware())
+	handler.Register(router, httpserver.NewRateLimiter(1, time.Minute))
+
+	rec := perform(router, http.MethodGet, "/", nil, nil)
+	csrfValue := csrfFrom(rec)
+	form := url.Values{"csrf_token": {csrfValue}, "answer": {"2"}}
+	perform(router, http.MethodPost, "/hx/tasks/"+task.ID.String()+"/check", form, map[string]string{"csrf_token": csrfValue})
+	rec = perform(router, http.MethodPost, "/hx/tasks/"+task.ID.String()+"/check", form, map[string]string{"csrf_token": csrfValue})
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("rate limit фрагмента: %d", rec.Code)
+	}
+}

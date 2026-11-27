@@ -224,6 +224,15 @@ table th {
 	color: var(--v-accent);
 }
 
+.v-site-header__user {
+	display: inline-block;
+	max-width: 220px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: middle;
+}
+
 .v-brand {
 	font-weight: 600;
 	font-size: var(--v-fs-20);
