@@ -1,0 +1,471 @@
+package publicsite
+
+import "oge-ege/internal/content"
+
+templ pageLayout(seo SEOMetadata, crumbs []Breadcrumb) {
+	<!DOCTYPE html>
+	<html lang="ru">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ seo.Title }</title>
+			if seo.Description != "" {
+				<meta name="description" content={ seo.Description }/>
+			}
+			if seo.NoIndex {
+				<meta name="robots" content="noindex, nofollow"/>
+			} else {
+				<meta name="robots" content="index, follow"/>
+			}
+			if seo.Canonical != "" {
+				<link rel="canonical" href={ seo.Canonical }/>
+			}
+			if seo.OGTitle != "" {
+				<meta property="og:title" content={ seo.OGTitle }/>
+			}
+			if seo.OGDescription != "" {
+				<meta property="og:description" content={ seo.OGDescription }/>
+			}
+			if seo.OGImage != "" {
+				<meta property="og:image" content={ seo.OGImage }/>
+			}
+			<meta property="og:type" content="website"/>
+			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"/>
+			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"/>
+			<link rel="stylesheet" href="/static/app.css"/>
+			<script defer src="/static/public/htmx.min.js"></script>
+			<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+			<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+			<script defer src="/static/public/public.js"></script>
+		</head>
+		<body>
+			<header class="container">
+				<nav>
+					<ul>
+						<li><a href="/"><strong>ОГЭ и ЕГЭ</strong></a></li>
+					</ul>
+					<ul>
+						<li><a href="/bank">Банк заданий</a></li>
+						<li><a href="/diagnostics/demo">Демо-диагностика</a></li>
+						<li><a href="/articles">Статьи</a></li>
+						<li><a href="/login">Войти</a></li>
+					</ul>
+				</nav>
+			</header>
+			<main class="container">
+				if len(crumbs) > 0 {
+					<nav aria-label="Хлебные крошки">
+						<ol>
+							for i, crumb := range crumbs {
+								<li>
+									if i == len(crumbs)-1 {
+										<span>{ crumb.Title }</span>
+									} else {
+										<a href={ crumb.Path }>{ crumb.Title }</a>
+									}
+								</li>
+							}
+						</ol>
+					</nav>
+				}
+				{ children... }
+			</main>
+			<footer class="container">
+				<small>Подготовка к ОГЭ и ЕГЭ. Открытый банк заданий и демо-диагностика.</small>
+			</footer>
+		</body>
+	</html>
+}
+
+templ HomePageView(page *HomePage) {
+	@pageLayout(page.SEO, nil) {
+		<hgroup>
+			<h1>Подготовка к ОГЭ и ЕГЭ</h1>
+			<p>Открытый банк заданий, демо-диагностика и разборы без регистрации.</p>
+		</hgroup>
+		<section>
+			<h2>Учебные треки</h2>
+			<ul>
+				for _, exam := range page.Exams {
+					<li><a href={ "/tracks/" + exam.Code }>{ exam.Title }</a></li>
+				}
+			</ul>
+		</section>
+		<p><a role="button" href="/bank">Перейти в банк заданий</a></p>
+	}
+}
+
+templ LandingView(page *LandingPage) {
+	@pageLayout(page.SEO, []Breadcrumb{
+		{Title: "Главная", Path: "/"},
+		{Title: page.Exam.Title, Path: "/tracks/" + page.Exam.Code},
+	}) {
+		<hgroup>
+			<h1>{ page.Exam.Title }</h1>
+			<p>Структура экзамена, темы и демо-диагностика.</p>
+		</hgroup>
+		<p>
+			<a role="button" href={ "/diagnostics/demo?exam=" + page.Exam.Code }>Пройти демо-диагностику</a>
+			<a role="button" class="secondary" href={ "/bank?exam=" + page.Exam.Code }>Открыть банк заданий</a>
+		</p>
+		if page.Year != nil {
+			<section>
+				<h2>Структура экзамена</h2>
+				<p>Учебный год { page.Year.Year }, длительность { page.Year.DurationMinutes } минут.</p>
+				<table>
+					<thead>
+						<tr><th>№</th><th>Часть</th><th>Тип ответа</th><th>Баллы</th></tr>
+					</thead>
+					<tbody>
+						for _, kim := range page.KimNumbers {
+							<tr>
+								<td>{ kim.Number }</td>
+								<td>{ kim.Part }</td>
+								<td>{ string(kim.AnswerType) }</td>
+								<td>{ kim.MaxPrimaryScore }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</section>
+		} else {
+			<section>
+				<h2>Структура экзамена</h2>
+				<p>Опубликованный учебный год пока не добавлен. Оставьте заявку, и мы сообщим о старте подготовки.</p>
+			</section>
+		}
+		if len(page.Topics) > 0 {
+			<section>
+				<h2>Темы</h2>
+				<ul>
+					for _, topic := range page.Topics {
+						<li>{ topic.Title }</li>
+					}
+				</ul>
+			</section>
+		}
+		<section>
+			<h2>Записаться на подготовку</h2>
+			@leadForm("/leads", page.Exam.Code, nil, false)
+		</section>
+	}
+}
+
+templ BankView(page *BankPage) {
+	@pageLayout(page.SEO, []Breadcrumb{
+		{Title: "Главная", Path: "/"},
+		{Title: "Банк заданий", Path: "/bank"},
+	}) {
+		<hgroup>
+			<h1>Открытый банк заданий</h1>
+			<p>Только опубликованные задания с автоматической проверкой.</p>
+		</hgroup>
+		<form method="get" action="/bank" hx-get="/hx/bank" hx-target="#bank-results" hx-push-url="true">
+			<div class="grid">
+				<label>
+					Код трека
+					<input type="text" name="exam" value={ page.Filter.ExamCode } placeholder="oge_math"/>
+				</label>
+				<label>
+					Номер КИМ
+					<input type="number" name="kim" value={ page.Filter.KimNumber } min="1"/>
+				</label>
+				<label>
+					Тема
+					<select name="topic">
+						<option value="">Все темы</option>
+						for _, topic := range page.Topics {
+							<option value={ topic.ID.String() }>{ topic.Title }</option>
+						}
+					</select>
+				</label>
+			</div>
+			<button type="submit">Показать задания</button>
+		</form>
+		<div id="bank-results">
+			@BankResultsView(page)
+		</div>
+	}
+}
+
+templ BankResultsView(page *BankPage) {
+	if len(page.Tasks) == 0 {
+		<article>Подходящих заданий пока нет. Попробуйте изменить фильтры или выберите другой трек.</article>
+	} else {
+		<ul>
+			for _, task := range page.Tasks {
+				<li>
+					<a href={ "/bank/" + task.ID.String() }>Задание</a>
+					<p>{ task.StatementMD }</p>
+				</li>
+			}
+		</ul>
+	}
+	if page.HasNext {
+		<p>
+			<a role="button" href={ "/bank?exam=" + page.Filter.ExamCode + "&kim=" + intString(page.Filter.KimNumber) + "&cursor=" + page.NextCursor.String() }>Следующая страница</a>
+		</p>
+	}
+}
+
+templ TaskView(page *TaskPage) {
+	@pageLayout(page.SEO, []Breadcrumb{
+		{Title: "Главная", Path: "/"},
+		{Title: "Банк заданий", Path: "/bank"},
+		{Title: "Задание", Path: "/bank/" + page.Task.ID.String()},
+	}) {
+		<article>
+			<h1>Задание</h1>
+			@templ.Raw(page.StatementHTML)
+			if len(page.Attachments) > 0 {
+				for _, attachment := range page.Attachments {
+					<figure>
+						<img src={ attachment.URL } alt={ attachment.Alt }/>
+					</figure>
+				}
+			}
+			if page.Topic != nil {
+				<p><small>Тема: { page.Topic.Title }</small></p>
+			}
+		</article>
+		<form method="post" action={ "/bank/" + page.Task.ID.String() + "/check" }>
+			<input type="hidden" name="csrf_token" value="__CSRF__"/>
+			<label>
+				Ваш ответ
+				<input type="text" name="answer" autocomplete="off" required/>
+			</label>
+			<button type="submit">Проверить</button>
+		</form>
+		if page.Result != nil {
+			@CheckResultView(page.Result)
+		}
+	}
+}
+
+templ CheckResultView(result *CheckResult) {
+	if result.Correct {
+		<article role="status">
+			<strong>Верно</strong>
+			<p>{ result.Explanation }</p>
+		</article>
+	} else {
+		<article role="alert">
+			<strong>Неверно</strong>
+			<p>{ result.Explanation }</p>
+		</article>
+	}
+}
+
+templ DemoChoiceView(page *HomePage) {
+	@pageLayout(page.SEO, []Breadcrumb{
+		{Title: "Главная", Path: "/"},
+		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
+	}) {
+		<hgroup>
+			<h1>Демо-диагностика</h1>
+			<p>Выберите трек, чтобы получить 5–7 заданий и увидеть результат без регистрации.</p>
+		</hgroup>
+		<ul>
+			for _, exam := range page.Exams {
+				<li><a href={ "/diagnostics/demo?exam=" + exam.Code }>{ exam.Title }</a></li>
+			}
+		</ul>
+	}
+}
+
+templ DemoView(start *DemoStart, token string) {
+	@pageLayout(start.SEO, []Breadcrumb{
+		{Title: "Главная", Path: "/"},
+		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
+		{Title: start.Exam.Title, Path: "/diagnostics/demo?exam=" + start.Exam.Code},
+	}) {
+		<hgroup>
+			<h1>Демо-диагностика: { start.Exam.Title }</h1>
+			<p>Ответьте на задания и получите итог с разбивкой по темам.</p>
+		</hgroup>
+		<form method="post" action="/diagnostics/demo/check">
+			<input type="hidden" name="csrf_token" value="__CSRF__"/>
+			<input type="hidden" name="demo_token" value={ token }/>
+			for i, task := range start.Tasks {
+				<article>
+					<h2>Задание { i + 1 }</h2>
+					<p>{ task.StatementMD }</p>
+					<label>
+						Ответ
+						<input type="text" name={ "answer_" + task.ID.String() } autocomplete="off"/>
+					</label>
+				</article>
+			}
+			<button type="submit">Завершить диагностику</button>
+		</form>
+	}
+}
+
+templ DemoResultView(result *DemoResult) {
+	@pageLayout(SEOMetadata{
+		Title:       "Результат демо-диагностики",
+		Description: "Итог демо-диагностики и разбивка по темам.",
+		Canonical:   "/diagnostics/demo",
+		NoIndex:     true,
+	}, []Breadcrumb{
+		{Title: "Главная", Path: "/"},
+		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
+		{Title: "Результат", Path: "/diagnostics/demo"},
+	}) {
+		<hgroup>
+			<h1>Результат демо-диагностики</h1>
+			<p>Верно { result.Correct } из { result.Total }.</p>
+		</hgroup>
+		<table>
+			<thead><tr><th>Тема</th><th>Верно</th><th>Всего</th></tr></thead>
+			<tbody>
+				for _, topic := range result.Topics {
+					<tr><td>{ topic.Title }</td><td>{ topic.Correct }</td><td>{ topic.Total }</td></tr>
+				}
+			</tbody>
+		</table>
+		<p>Полный отчёт с рекомендациями доступен после регистрации.</p>
+		<p><a role="button" href="/register">Зарегистрироваться</a></p>
+	}
+}
+
+templ ArticlesView(articles []Article, next string) {
+	@pageLayout(SEOMetadata{
+		Title:       "Статьи и разборы",
+		Description: "Публикации о подготовке к ОГЭ и ЕГЭ.",
+		Canonical:   "/articles",
+	}, []Breadcrumb{
+		{Title: "Главная", Path: "/"},
+		{Title: "Статьи", Path: "/articles"},
+	}) {
+		<hgroup>
+			<h1>Статьи и разборы</h1>
+			<p>Материалы о подготовке к экзаменам.</p>
+		</hgroup>
+		if len(articles) == 0 {
+			<article>Опубликованных статей пока нет.</article>
+		} else {
+			<ul>
+				for _, article := range articles {
+					<li>
+						<a href={ "/articles/" + article.Slug }>{ article.Title }</a>
+						if article.Excerpt != "" {
+							<p>{ article.Excerpt }</p>
+						}
+					</li>
+				}
+			</ul>
+		}
+		if next != "" {
+			<p><a role="button" href={ "/articles?cursor=" + next }>Следующая страница</a></p>
+		}
+	}
+}
+
+templ ArticlePageView(view *ArticleView) {
+	@pageLayout(view.SEO, view.Breadcrumbs) {
+		<article>
+			<h1>{ view.Article.Title }</h1>
+			if view.Article.Excerpt != "" {
+				<p><em>{ view.Article.Excerpt }</em></p>
+			}
+			@templ.Raw(view.ContentHTML)
+		</article>
+	}
+}
+
+templ leadForm(action, source string, fieldErrors map[string]string, success bool) {
+	if success {
+		<article role="status">Спасибо! Заявка отправлена, мы свяжемся с вами.</article>
+	}
+	if len(fieldErrors) > 0 {
+		<article role="alert">Проверьте поля формы.</article>
+	}
+	<form method="post" action={ action } hx-post={ action } hx-target="closest section">
+		<input type="hidden" name="csrf_token" value="__CSRF__"/>
+		<input type="hidden" name="source" value={ source }/>
+		<div class="visually-hidden">
+			<label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"/></label>
+		</div>
+		<label>
+			Имя
+			<input type="text" name="name" required minlength="2" maxlength="100"/>
+			if fieldErrors["name"] != "" {
+				<small>{ fieldErrors["name"] }</small>
+			}
+		</label>
+		<label>
+			Контакт
+			<input type="text" name="contact" required minlength="3" maxlength="200" placeholder="email или телефон"/>
+			if fieldErrors["contact"] != "" {
+				<small>{ fieldErrors["contact"] }</small>
+			}
+		</label>
+		<label>
+			Комментарий
+			<textarea name="comment" maxlength="2000"></textarea>
+			if fieldErrors["comment"] != "" {
+				<small>{ fieldErrors["comment"] }</small>
+			}
+		</label>
+		<button type="submit">Отправить заявку</button>
+	</form>
+}
+
+templ LeadFormView(source string, fieldErrors map[string]string, success bool) {
+	@pageLayout(SEOMetadata{
+		Title:       "Оставить заявку",
+		Description: "Заявка на подготовку к ОГЭ и ЕГЭ.",
+		Canonical:   "/leads",
+		NoIndex:     true,
+	}, []Breadcrumb{
+		{Title: "Главная", Path: "/"},
+		{Title: "Заявка", Path: "/leads"},
+	}) {
+		<hgroup>
+			<h1>Оставить заявку</h1>
+			<p>Мы свяжемся с вами и поможем выбрать программу.</p>
+		</hgroup>
+		<section>
+			@leadForm("/leads", source, fieldErrors, success)
+		</section>
+	}
+}
+
+templ ErrorView(status int, message string) {
+	@pageLayout(SEOMetadata{
+		Title:   message,
+		NoIndex: true,
+	}, []Breadcrumb{
+		{Title: "Главная", Path: "/"},
+		{Title: message, Path: "/"},
+	}) {
+		<hgroup>
+			<h1>{ intString(status) }</h1>
+			<p>{ message }</p>
+		</hgroup>
+		<p><a role="button" href="/">На главную</a></p>
+	}
+}
+
+templ DemoUnavailableView(exams []content.Exam) {
+	@pageLayout(SEOMetadata{
+		Title:       "Демо-диагностика",
+		Description: "Для выбранного трека пока недостаточно заданий.",
+		Canonical:   "/diagnostics/demo",
+		NoIndex:     true,
+	}, []Breadcrumb{
+		{Title: "Главная", Path: "/"},
+		{Title: "Демо-диагностика", Path: "/diagnostics/demo"},
+	}) {
+		<hgroup>
+			<h1>Демо-диагностика</h1>
+			<p>Для выбранного трека пока недостаточно опубликованных заданий. Выберите другой трек.</p>
+		</hgroup>
+		<ul>
+			for _, exam := range exams {
+				<li><a href={ "/diagnostics/demo?exam=" + exam.Code }>{ exam.Title }</a></li>
+			}
+		</ul>
+	}
+}

@@ -29,6 +29,7 @@ type Repository interface {
 	UpdateExamYear(ctx context.Context, q db.Querier, year *ExamYear) error
 	GetExamYear(ctx context.Context, q db.Querier, id uuid.UUID) (*ExamYear, error)
 	GetExamYearByYear(ctx context.Context, q db.Querier, examID uuid.UUID, year int) (*ExamYear, error)
+	GetLatestPublishedExamYear(ctx context.Context, q db.Querier, examID uuid.UUID) (*ExamYear, error)
 	ListExamYears(ctx context.Context, q db.Querier, filter ExamYearFilter) ([]ExamYear, error)
 	SetExamYearStatus(ctx context.Context, q db.Querier, id uuid.UUID, status Status, now time.Time) error
 	DeleteExamYear(ctx context.Context, q db.Querier, id uuid.UUID) error
@@ -287,6 +288,14 @@ FROM content.exam_years
 WHERE exam_id = $1 AND year = $2
 `
 
+const getLatestPublishedExamYearQuery = `
+SELECT ` + examYearColumns + `
+FROM content.exam_years
+WHERE exam_id = $1 AND status = 'published'
+ORDER BY year DESC
+LIMIT 1
+`
+
 const listExamYearsQuery = `
 SELECT ` + examYearColumns + `
 FROM content.exam_years
@@ -335,6 +344,11 @@ func (r *PgRepository) GetExamYear(ctx context.Context, q db.Querier, id uuid.UU
 // GetExamYearByYear возвращает учебный год трека.
 func (r *PgRepository) GetExamYearByYear(ctx context.Context, q db.Querier, examID uuid.UUID, year int) (*ExamYear, error) {
 	return scanExamYear(q.QueryRow(ctx, getExamYearByYearQuery, examID, year))
+}
+
+// GetLatestPublishedExamYear возвращает последний опубликованный учебный год трека.
+func (r *PgRepository) GetLatestPublishedExamYear(ctx context.Context, q db.Querier, examID uuid.UUID) (*ExamYear, error) {
+	return scanExamYear(q.QueryRow(ctx, getLatestPublishedExamYearQuery, examID))
 }
 
 // ListExamYears возвращает страницу учебных годов.
@@ -465,6 +479,14 @@ func nullableUUIDPtr(id *uuid.UUID) any {
 	}
 
 	return *id
+}
+
+func nullableStrings(values []string) any {
+	if len(values) == 0 {
+		return nil
+	}
+
+	return values
 }
 
 func nullableStatus(status *Status) any {

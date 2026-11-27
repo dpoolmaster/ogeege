@@ -7,7 +7,7 @@ func TestLatestVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("неожиданная ошибка: %v", err)
 	}
-	if version != 7 {
-		t.Fatalf("версия = %d, ожидалась 7", version)
+	if version != 9 {
+		t.Fatalf("версия = %d, ожидалась 9", version)
 	}
 }

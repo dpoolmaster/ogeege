@@ -479,13 +479,16 @@ type TopicFilter struct {
 
 // TaskFilter — фильтр списка заданий.
 type TaskFilter struct {
-	Cursor      uuid.UUID
-	Limit       int
-	ExamYearID  *uuid.UUID
-	KimNumberID *uuid.UUID
-	TopicID     *uuid.UUID
-	Status      *Status
-	Query       string
+	Cursor               uuid.UUID
+	Limit                int
+	ExamID               *uuid.UUID
+	ExamYearID           *uuid.UUID
+	KimNumberID          *uuid.UUID
+	TopicID              *uuid.UUID
+	Status               *Status
+	Query                string
+	Kinds                []string
+	ExcludePublishedMock bool
 }
 
 // VariantFilter — фильтр списка вариантов.

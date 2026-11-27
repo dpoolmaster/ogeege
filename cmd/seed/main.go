@@ -6,7 +6,9 @@ import (
 	"os"
 
 	"oge-ege/internal/content"
-	"oge-ege/internal/content/seed"
+	contentseed "oge-ege/internal/content/seed"
+	"oge-ege/internal/publicsite"
+	publicseed "oge-ege/internal/publicsite/seed"
 	"oge-ege/internal/shared/clock"
 	"oge-ege/internal/shared/config"
 	"oge-ege/internal/shared/db"
@@ -36,9 +38,17 @@ func run() error {
 	defer pool.Close()
 
 	txManager := db.NewTxManager(pool)
-	service := content.NewService(content.NewPgRepository(), pool, txManager, clock.New(), nil, logger)
+	clk := clock.New()
+	service := content.NewService(content.NewPgRepository(), pool, txManager, clk, nil, logger)
 
-	if err := seed.Run(ctx, service, logger); err != nil {
+	if err := contentseed.Run(ctx, service, logger); err != nil {
+		return err
+	}
+
+	publicService := publicsite.NewService(
+		publicsite.NewPgRepository(), pool, txManager, clk, service, nil, nil, logger,
+	)
+	if err := publicseed.Run(ctx, publicService, logger); err != nil {
 		return err
 	}
 

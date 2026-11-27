@@ -21,6 +21,7 @@ type Repository interface {
 	UpdatePasswordHash(ctx context.Context, q db.Querier, id uuid.UUID, hash string, now time.Time) error
 	AnonymizeUser(ctx context.Context, q db.Querier, id uuid.UUID, now time.Time) error
 	SearchUsers(ctx context.Context, q db.Querier, query string, cursor uuid.UUID, limit int) ([]User, error)
+	ListActiveAdminEmails(ctx context.Context, q db.Querier) ([]string, error)
 	UpdateUserRole(ctx context.Context, q db.Querier, id uuid.UUID, role Role, now time.Time) error
 	UpdateUserStatus(ctx context.Context, q db.Querier, id uuid.UUID, status Status, now time.Time) error
 
@@ -101,6 +102,13 @@ WHERE ($1::uuid IS NULL OR id > $1)
   AND ($2::text = '' OR email ILIKE '%' || $2 || '%' OR id::text = $2)
 ORDER BY id
 LIMIT $3
+`
+
+const listActiveAdminEmailsQuery = `
+SELECT email
+FROM auth.users
+WHERE role = 'admin' AND status = 'active'
+ORDER BY lower(email)
 `
 
 const updateUserRoleQuery = `
@@ -320,6 +328,29 @@ func (r *PgRepository) SearchUsers(ctx context.Context, q db.Querier, query stri
 	}
 
 	return users, nil
+}
+
+// ListActiveAdminEmails возвращает email активных администраторов.
+func (r *PgRepository) ListActiveAdminEmails(ctx context.Context, q db.Querier) ([]string, error) {
+	rows, err := q.Query(ctx, listActiveAdminEmailsQuery)
+	if err != nil {
+		return nil, fmt.Errorf("выбрать email администраторов: %w", err)
+	}
+	defer rows.Close()
+
+	var emails []string
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, fmt.Errorf("прочитать email администратора: %w", err)
+		}
+		emails = append(emails, email)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("прочитать email администраторов: %w", err)
+	}
+
+	return emails, nil
 }
 
 // UpdateUserRole меняет роль пользователя.

@@ -174,3 +174,37 @@ func TestMethodistDeniedAdminCapabilities(t *testing.T) {
 		})
 	}
 }
+
+func TestOptionalAuth(t *testing.T) {
+	env := newTestEnv()
+	user := env.register(t)
+	env.verify(t, user)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/public", OptionalAuth(env.service), func(c *gin.Context) {
+		if _, ok := CurrentUser(c); ok {
+			c.String(http.StatusOK, "user")
+			return
+		}
+		c.String(http.StatusOK, "anonymous")
+	})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/public", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "anonymous" {
+		t.Fatalf("аноним: %d %q", rec.Code, rec.Body.String())
+	}
+
+	_, token, err := env.service.Login(t.Context(), "student@example.ru", "strong-password", "127.0.0.1", "agent")
+	if err != nil {
+		t.Fatalf("вход: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/public", nil)
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: token})
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "user" {
+		t.Fatalf("аутентификация: %d %q", rec.Code, rec.Body.String())
+	}
+}

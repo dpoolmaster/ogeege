@@ -18,6 +18,7 @@ import (
 	"oge-ege/internal/help"
 	"oge-ege/internal/notify"
 	"oge-ege/internal/profile"
+	"oge-ege/internal/publicsite"
 	"oge-ege/internal/shared/clock"
 	"oge-ege/internal/shared/config"
 	"oge-ege/internal/shared/db"
@@ -106,6 +107,20 @@ func run() error {
 	authHandler := auth.NewHandler(authService, csrf, profileService, logger)
 	profileHandler := profile.NewHandler(profileService, logger)
 
+	publicRepo := publicsite.NewPgRepository()
+	publicService := publicsite.NewService(
+		publicRepo, pool, txManager, clk, contentService, authService, notifyService, logger,
+	)
+	publicHandler := publicsite.NewHandler(
+		publicService,
+		csrf,
+		publicsite.NewDemoSigner(cfg.App.SessionSecret, publicsite.DemoTTL, clk),
+		publicsite.NewCache(60*time.Second, 1000),
+		logger,
+		cfg.App.Env == "production",
+		cfg.App.BaseURL,
+	)
+
 	loginLimiter := httpserver.NewRateLimiter(cfg.RateLimit.LoginPerMin, time.Minute)
 	apiLimiter := httpserver.NewRateLimiter(cfg.RateLimit.APIPerMin, time.Minute)
 
@@ -117,7 +132,7 @@ func run() error {
 		MigrationChecker: db.NewMigrationChecker(db.NewPgMigrationStateReader(pool), latestMigration),
 		CSRF:             csrf.Middleware(),
 		Routes: func(router *gin.Engine) {
-			registerRoutes(router, authService, authHandler, profileHandler, adminHandler, helpHandler, storageStore, loginLimiter, apiLimiter)
+			registerRoutes(router, authService, authHandler, profileHandler, adminHandler, helpHandler, publicHandler, storageStore, loginLimiter, apiLimiter)
 		},
 	})
 
@@ -171,6 +186,7 @@ func registerRoutes(
 	profileHandler *profile.Handler,
 	adminHandler *admin.Handler,
 	helpHandler *help.Handler,
+	publicHandler *publicsite.Handler,
 	storageStore storage.Store,
 	loginLimiter *httpserver.RateLimiter,
 	apiLimiter *httpserver.RateLimiter,
@@ -228,6 +244,9 @@ func registerRoutes(
 	router.GET("/media/*key", apiLimiter.Middleware(httpserver.ClientIPKey), storage.MediaHandler(storageStore))
 	router.GET("/admin", webadmin.Handler())
 	router.GET("/admin/*path", webadmin.Handler())
+
+	publicGroup := router.Group("", auth.OptionalAuth(authService))
+	publicHandler.Register(publicGroup, apiLimiter)
 }
 
 func setGinMode(env string) {

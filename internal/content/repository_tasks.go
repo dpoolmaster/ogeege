@@ -96,8 +96,20 @@ WHERE status = 'published' AND is_public = true
   AND ($3::uuid IS NULL OR kim_number_id = $3)
   AND ($4::uuid IS NULL OR topic_id = $4)
   AND ($5::text = '' OR statement_md ILIKE '%' || $5 || '%')
+  AND ($6::uuid IS NULL OR exam_year_id IN (
+      SELECT id FROM content.exam_years WHERE exam_id = $6
+  ))
+  AND ($7::text[] IS NULL OR answer_spec->>'kind' = ANY($7::text[]))
+  AND (NOT $8::boolean OR NOT EXISTS (
+      SELECT 1
+      FROM content.variant_tasks vt
+      JOIN content.variants v ON v.id = vt.variant_id
+      WHERE vt.task_id = content.tasks.id
+        AND v.kind = 'mock'
+        AND v.status = 'published'
+  ))
 ORDER BY id
-LIMIT $6
+LIMIT $9
 `
 
 const setTaskStatusQuery = `
@@ -215,7 +227,8 @@ func (r *PgRepository) ListTasks(ctx context.Context, q db.Querier, filter TaskF
 func (r *PgRepository) ListPublicTasks(ctx context.Context, q db.Querier, filter TaskFilter) ([]Task, error) {
 	rows, err := q.Query(ctx, listPublicTasksQuery,
 		nullableUUID(filter.Cursor), nullableUUIDPtr(filter.ExamYearID), nullableUUIDPtr(filter.KimNumberID),
-		nullableUUIDPtr(filter.TopicID), filter.Query, normalizeLimit(filter.Limit),
+		nullableUUIDPtr(filter.TopicID), filter.Query, nullableUUIDPtr(filter.ExamID),
+		nullableStrings(filter.Kinds), filter.ExcludePublishedMock, normalizeLimit(filter.Limit),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("выбрать публичные задания: %w", err)

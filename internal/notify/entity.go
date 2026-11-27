@@ -31,6 +31,9 @@ const TemplateCodeVerification = "email_verification"
 // TemplateCodePasswordReset — код шаблона сброса пароля.
 const TemplateCodePasswordReset = "password_reset"
 
+// TemplateCodeLeadNotification — код шаблона уведомления о заявке.
+const TemplateCodeLeadNotification = "lead_notification"
+
 // Message описывает письмо, которое нужно поставить в outbox.
 type Message struct {
 	UserID    uuid.UUID

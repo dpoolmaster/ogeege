@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"oge-ege/internal/grading"
 	"oge-ege/internal/shared/db"
 	"oge-ege/internal/shared/ids"
 	"oge-ege/internal/shared/storage"
@@ -134,6 +135,63 @@ func (s *Service) ListTasks(ctx context.Context, filter TaskFilter) ([]Task, err
 // ListPublicTasks возвращает опубликованные публичные задания.
 func (s *Service) ListPublicTasks(ctx context.Context, filter TaskFilter) ([]Task, error) {
 	return s.repo.ListPublicTasks(ctx, s.db, filter)
+}
+
+// ListDemoTasks выбирает от 5 до 7 проверяемых заданий демо-диагностики.
+// На каждый номер КИМ попадает не более одного задания; задания опубликованных
+// пробников исключаются.
+func (s *Service) ListDemoTasks(ctx context.Context, examYearID uuid.UUID, limit int) ([]Task, error) {
+	if limit < 5 {
+		limit = 5
+	}
+	if limit > 7 {
+		limit = 7
+	}
+
+	tasks, err := s.repo.ListPublicTasks(ctx, s.db, TaskFilter{
+		ExamYearID:           &examYearID,
+		Kinds:                supportedGradingKinds(),
+		ExcludePublishedMock: true,
+		Limit:                200,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	s.shuffler.Shuffle(len(tasks), func(i, j int) {
+		tasks[i], tasks[j] = tasks[j], tasks[i]
+	})
+
+	seen := make(map[uuid.UUID]struct{}, len(tasks))
+	result := make([]Task, 0, limit)
+	for _, task := range tasks {
+		if _, ok := seen[task.KimNumberID]; ok {
+			continue
+		}
+		seen[task.KimNumberID] = struct{}{}
+		result = append(result, task)
+		if len(result) == limit {
+			break
+		}
+	}
+
+	if len(result) < limit {
+		return nil, ErrInsufficient
+	}
+
+	return result, nil
+}
+
+func supportedGradingKinds() []string {
+	kinds := []string{"number", "text", "digits", "interval"}
+	supported := make([]string, 0, len(kinds))
+	for _, kind := range kinds {
+		if grading.Supports(kind) {
+			supported = append(supported, kind)
+		}
+	}
+
+	return supported
 }
 
 // PublishTask публикует задание после проверки.

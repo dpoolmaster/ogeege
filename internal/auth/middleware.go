@@ -66,6 +66,19 @@ func Auth(service *Service) gin.HandlerFunc {
 	}
 }
 
+// OptionalAuth распознаёт сессию для публичных страниц, не прерывая анонимный запрос.
+func OptionalAuth(service *Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, session, err := service.Authenticate(c.Request.Context(), SessionTokenFromRequest(c))
+		if err == nil {
+			WithUser(c, user)
+			WithSession(c, session)
+		}
+
+		c.Next()
+	}
+}
+
 // AuthPage проверяет сессию для HTML-страниц и при её отсутствии перенаправляет на вход.
 func AuthPage(service *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {

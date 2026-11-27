@@ -271,6 +271,11 @@ func (s *Service) GetExamYearByYear(ctx context.Context, examID uuid.UUID, year 
 	return s.repo.GetExamYearByYear(ctx, s.db, examID, year)
 }
 
+// GetLatestPublishedExamYear возвращает последний опубликованный учебный год трека.
+func (s *Service) GetLatestPublishedExamYear(ctx context.Context, examID uuid.UUID) (*ExamYear, error) {
+	return s.repo.GetLatestPublishedExamYear(ctx, s.db, examID)
+}
+
 // ListExamYears возвращает страницу учебных годов.
 func (s *Service) ListExamYears(ctx context.Context, filter ExamYearFilter) ([]ExamYear, error) {
 	return s.repo.ListExamYears(ctx, s.db, filter)

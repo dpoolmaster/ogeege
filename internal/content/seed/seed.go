@@ -286,13 +286,27 @@ func ensureVariant(ctx context.Context, service *content.Service, examYear *cont
 		return nil
 	}
 
-	limit := len(published)
-	if limit > 10 {
-		limit = 10
+	selected := make([]content.Task, 0, len(published))
+	for _, task := range published {
+		kim, err := service.GetKimNumber(ctx, task.KimNumberID)
+		if err != nil {
+			return err
+		}
+		if kim.Part == 2 {
+			selected = append(selected, task)
+		}
 	}
-	tasks := make([]content.VariantTaskInput, 0, limit)
-	for i := 0; i < limit; i++ {
-		tasks = append(tasks, content.VariantTaskInput{TaskID: published[i].ID, Points: 1})
+	if len(selected) == 0 {
+		limit := len(published)
+		if limit > 10 {
+			limit = 10
+		}
+		selected = published[:limit]
+	}
+
+	tasks := make([]content.VariantTaskInput, 0, len(selected))
+	for _, task := range selected {
+		tasks = append(tasks, content.VariantTaskInput{TaskID: task.ID, Points: 1})
 	}
 
 	variant, err := service.CreateVariant(ctx, content.VariantInput{

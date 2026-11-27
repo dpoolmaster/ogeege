@@ -621,6 +621,11 @@ func (s *Service) SearchUsers(ctx context.Context, query string, cursor uuid.UUI
 	return s.repo.SearchUsers(ctx, s.db, strings.TrimSpace(query), cursor, limit)
 }
 
+// ListActiveAdminEmails возвращает email активных администраторов.
+func (s *Service) ListActiveAdminEmails(ctx context.Context) ([]string, error) {
+	return s.repo.ListActiveAdminEmails(ctx, s.db)
+}
+
 // SetUserRole меняет роль пользователя.
 func (s *Service) SetUserRole(ctx context.Context, id uuid.UUID, role Role) (*User, error) {
 	if !role.Valid() {

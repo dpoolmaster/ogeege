@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -302,6 +303,18 @@ func (f *fakeRepo) RevokeOtherUserSessions(_ context.Context, _ db.Querier, user
 		}
 	}
 	return nil
+}
+
+func (f *fakeRepo) ListActiveAdminEmails(_ context.Context, _ db.Querier) ([]string, error) {
+	var emails []string
+	for _, user := range f.usersByID {
+		if user.Role == RoleAdmin && user.Status == StatusActive {
+			emails = append(emails, user.Email)
+		}
+	}
+	sort.Strings(emails)
+
+	return emails, nil
 }
 
 func (f *fakeRepo) SearchUsers(_ context.Context, _ db.Querier, query string, cursor uuid.UUID, limit int) ([]User, error) {
@@ -959,5 +972,24 @@ func TestLoginAttemptWindowExpires(t *testing.T) {
 	env.clock.Advance(LoginAttemptWindow + time.Minute)
 	if _, _, err := env.service.Login(context.Background(), "student@example.ru", "strong-password", "10.0.0.9", "agent"); err != nil {
 		t.Fatalf("после окна вход должен быть разрешён: %v", err)
+	}
+}
+
+func TestListActiveAdminEmails(t *testing.T) {
+	repo := newFakeRepo()
+	admin := &User{ID: uuid.Must(uuid.NewV7()), Email: "admin@example.ru", Role: RoleAdmin, Status: StatusActive}
+	blocked := &User{ID: uuid.Must(uuid.NewV7()), Email: "blocked@example.ru", Role: RoleAdmin, Status: StatusBlocked}
+	student := &User{ID: uuid.Must(uuid.NewV7()), Email: "student@example.ru", Role: RoleStudent, Status: StatusActive}
+	for _, user := range []*User{admin, blocked, student} {
+		repo.usersByID[user.ID] = user
+	}
+	service := NewService(repo, nil, fakeTx{}, &fakeEnqueuer{}, &testClock{now: time.Now()}, "https://example.ru", discardLogger())
+
+	emails, err := service.ListActiveAdminEmails(context.Background())
+	if err != nil {
+		t.Fatalf("неожиданная ошибка: %v", err)
+	}
+	if len(emails) != 1 || emails[0] != "admin@example.ru" {
+		t.Fatalf("email = %v", emails)
 	}
 }
