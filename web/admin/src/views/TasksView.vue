@@ -1,9 +1,13 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { api } from '../api'
 import Editor from '../components/Editor.vue'
 
 const items = ref([])
+const examYears = ref([])
+const kimNumbers = ref([])
+const topics = ref([])
+const exams = ref([])
 const error = ref('')
 const editingId = ref('')
 const importText = ref('')
@@ -22,6 +26,55 @@ const form = reactive({
   source_ref: ''
 })
 
+const examTitles = computed(() => {
+  const map = {}
+  for (const exam of exams.value) map[exam.id] = exam.title
+  return map
+})
+
+const examYearLabels = computed(() => {
+  const map = {}
+  for (const year of examYears.value) {
+    const title = examTitles.value[year.exam_id]
+    map[year.id] = title ? `${title} — ${year.year}` : String(year.year)
+  }
+  return map
+})
+
+const kimNumberLabels = computed(() => {
+  const map = {}
+  for (const number of kimNumbers.value) {
+    map[number.id] = number.title
+      ? `№${number.number}. ${number.title}`
+      : `№${number.number} (часть ${number.part})`
+  }
+  return map
+})
+
+const filterKimNumbers = computed(() => {
+  if (!filter.exam_year_id) return kimNumbers.value
+  return kimNumbers.value.filter((number) => number.exam_year_id === filter.exam_year_id)
+})
+
+const formKimNumbers = computed(() =>
+  kimNumbers.value.filter((number) => number.exam_year_id === form.exam_year_id),
+)
+
+const formTopics = computed(() => {
+  const year = examYears.value.find((item) => item.id === form.exam_year_id)
+  if (!year) return []
+  return topics.value.filter((topic) => topic.exam_id === year.exam_id)
+})
+
+function onFilterYearChange() {
+  filter.kim_number_id = ''
+}
+
+function onFormYearChange() {
+  form.kim_number_id = ''
+  form.topic_id = ''
+}
+
 async function load() {
   error.value = ''
   const params = new URLSearchParams({ limit: '100' })
@@ -33,6 +86,23 @@ async function load() {
   try {
     const data = await api('/admin/tasks?' + params.toString())
     items.value = data.items || []
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+async function loadRefs() {
+  try {
+    const [years, numbers, topicList, examList] = await Promise.all([
+      api('/admin/exam-years?limit=200'),
+      api('/admin/kim-numbers?limit=200'),
+      api('/admin/topics?limit=200'),
+      api('/admin/exams?limit=200')
+    ])
+    examYears.value = years.items || []
+    kimNumbers.value = numbers.items || []
+    topics.value = topicList.items || []
+    exams.value = examList.items || []
   } catch (err) {
     error.value = err.message
   }
@@ -123,7 +193,10 @@ async function upload() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadRefs()
+})
 </script>
 
 <template>
@@ -132,12 +205,18 @@ onMounted(load)
 
   <form class="admin-form" @submit.prevent="load">
     <label>
-      ID учебного года
-      <input v-model="filter.exam_year_id" placeholder="ID учебного года" />
+      Учебный год
+      <select v-model="filter.exam_year_id" @change="onFilterYearChange">
+        <option value="">Все годы</option>
+        <option v-for="year in examYears" :key="year.id" :value="year.id">{{ examYearLabels[year.id] }}</option>
+      </select>
     </label>
     <label>
-      ID номера КИМ
-      <input v-model="filter.kim_number_id" placeholder="ID номера КИМ" />
+      Номер КИМ
+      <select v-model="filter.kim_number_id">
+        <option value="">Все номера</option>
+        <option v-for="number in filterKimNumbers" :key="number.id" :value="number.id">{{ kimNumberLabels[number.id] }}</option>
+      </select>
     </label>
     <label>
       Статус
@@ -158,16 +237,25 @@ onMounted(load)
   <h3>{{ editingId ? 'Изменить задание' : 'Новое задание' }}</h3>
   <form class="admin-form" @submit.prevent="save">
     <label>
-      ID учебного года
-      <input v-model="form.exam_year_id" placeholder="ID учебного года" required />
+      Учебный год
+      <select v-model="form.exam_year_id" required @change="onFormYearChange">
+        <option value="" disabled>Выберите год</option>
+        <option v-for="year in examYears" :key="year.id" :value="year.id">{{ examYearLabels[year.id] }}</option>
+      </select>
     </label>
     <label>
-      ID номера КИМ
-      <input v-model="form.kim_number_id" placeholder="ID номера КИМ" required />
+      Номер КИМ
+      <select v-model="form.kim_number_id" required>
+        <option value="" disabled>Выберите номер</option>
+        <option v-for="number in formKimNumbers" :key="number.id" :value="number.id">{{ kimNumberLabels[number.id] }}</option>
+      </select>
     </label>
     <label>
-      ID темы
-      <input v-model="form.topic_id" placeholder="ID темы" />
+      Тема
+      <select v-model="form.topic_id">
+        <option value="">Без темы</option>
+        <option v-for="topic in formTopics" :key="topic.id" :value="topic.id">{{ topic.code }}. {{ topic.title }}</option>
+      </select>
     </label>
     <label>
       Сложность
