@@ -15,7 +15,7 @@
 |---|---|---|---|
 | 0 | Каркас проекта | `stage-0-platform-foundation` | реализован |
 | 1 | Аутентификация, профиль, роли | `stage-1-auth-profile-roles` | реализован |
-| 2 | Контент, админка, импорт | `stage-2-content-admin-import` | спланирован |
+| 2 | Контент, админка, импорт | `stage-2-content-admin-import` | реализован |
 | 3 | Публичный контур | `stage-3-public-site` | не начат |
 | 4 | Диагностика, карта пробелов, план | `stage-4-diagnostics-gap-map-plan` | не начат |
 | 5 | Практика и автопроверка | `stage-5-practice-autocheck` | не начат |
@@ -58,14 +58,15 @@ Change: `stage-1-auth-profile-roles` (заархивирован как `2026-11
 
 ### Этап 2. Контент, админка, импорт — L
 
-Change: `stage-2-content-admin-import`.
+Change: `stage-2-content-admin-import` (заархивирован как `2026-11-26-stage-2-content-admin-import`).
 
 - Capability: `content` (12 требований), `admin` (8 требований), `profile` (изменено 1 требование — проверка трека).
 - Ключевые требования ТЗ: FR-CONT-01…10, FR-ADM-01…04, 07, 09, 11, 12, FR-IMP-01…07, QC-01…06, SEC-AUD-01…04.
 - Зависимости: этап 1 (роли, аудит).
 - Артефакты: `proposal.md`, `specs/{content,admin,profile}/spec.md`, `design.md`, `tasks.md` — готовы, `openspec validate --strict` проходит.
-- Задачи: 17 групп, 68 задач. Миграции: `000006_content`, `000007_admin`.
+- Задачи: 17 групп, 68 задач — выполнены, `go build ./...`, `go test ./...` и `golangci-lint` зелёные. Миграции: `000006_content`, `000007_admin`.
 - Решения дизайна: `admin` — композиционный модуль над `content` и `auth`; аудит отдельной транзакцией после операции; активная версия задания в `content.tasks`, история в `content.task_versions`; импорт структурированного JSON без NLP; SPA Vue 3 + Vite + TipTap + KaTeX, встроенная через `go:embed`; S3-хранилище с выдачей через `/media/{key}`; `profile` проверяет трек через интерфейс `content`.
+- Открытый долг (перенесён на этап 5): валидация `answer_spec` проверяет только поле `kind` по списку в `content`; per-kind схема полей и реестр стратегий `grading` появятся вместе с первым чекером на этапе 5. См. примечание в `design.md` этапа 2.
 - Вне этапа: FR-ADM-05 (промпты) — этап 7, FR-ADM-06 (review) — этап 7, FR-ADM-08 (платежи) — этап 9, FR-ADM-10 (метрики) — этап 10; полный банк из 640 заданий — задача наполнения, seed даёт структуру и демонстрационный набор.
 
 ### Этап 3. Публичный контур — M
@@ -163,3 +164,4 @@ Change: `stage-10-notifications-hardening` (не создан).
 | 2026-11-26 | Этап 0 реализован: change заархивирован как `2026-11-26-stage-0-platform-foundation`, `platform-foundation` синхронизирован в `openspec/specs`. |
 | 2026-11-26 | Этап 1 реализован: задачи 50/50, тесты и линтер зелёные. Change заархивирован как `2026-11-26-stage-1-auth-profile-roles`, спеки `auth`, `profile`, `notify` синхронизированы. |
 | 2026-11-26 | Этап 2 спланирован: change `stage-2-content-admin-import`, capabilities `content` (12), `admin` (8), `profile` (изменено 1). Артефакты готовы, `openspec validate --strict` проходит. Следующий шаг — этап 3. |
+| 2026-11-27 | Этап 2 реализован: задачи 68/68, тесты и линтер зелёные, change заархивирован как `2026-11-26-stage-2-content-admin-import`. Зафиксирован долг: per-kind валидация `answer_spec` и реестр `grading` — этап 5. Следующий шаг — этап 3. |

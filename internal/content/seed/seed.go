@@ -20,12 +20,18 @@ type trackSpec struct {
 	durationMinutes int
 	part1Count      int
 	lastNumber      int
+	scoreMode       string
 }
 
+const (
+	scoreModeGrade = "grade"
+	scoreModeTest  = "test"
+)
+
 var tracks = []trackSpec{
-	{code: "oge_math", title: "ОГЭ математика", durationMinutes: 235, part1Count: 19, lastNumber: 25},
-	{code: "ege_math_profile", title: "ЕГЭ математика (профиль)", durationMinutes: 235, part1Count: 11, lastNumber: 18},
-	{code: "ege_math_base", title: "ЕГЭ математика (база)", durationMinutes: 180, part1Count: 21, lastNumber: 21},
+	{code: "oge_math", title: "ОГЭ математика", durationMinutes: 235, part1Count: 19, lastNumber: 25, scoreMode: scoreModeGrade},
+	{code: "ege_math_profile", title: "ЕГЭ математика (профиль)", durationMinutes: 235, part1Count: 11, lastNumber: 18, scoreMode: scoreModeTest},
+	{code: "ege_math_base", title: "ЕГЭ математика (база)", durationMinutes: 180, part1Count: 21, lastNumber: 21, scoreMode: scoreModeGrade},
 }
 
 // Run создаёт демонстрационный контент; повторный запуск не создаёт дубликатов.
@@ -116,7 +122,7 @@ func seedTrack(ctx context.Context, service *content.Service, logger *slog.Logge
 		return err
 	}
 
-	if err := ensureScoreScale(ctx, service, examYear, kimNumbers, spec.code == "ege_math_profile"); err != nil {
+	if err := ensureScoreScale(ctx, service, examYear, kimNumbers, spec.scoreMode); err != nil {
 		return err
 	}
 
@@ -303,7 +309,7 @@ func ensureVariant(ctx context.Context, service *content.Service, examYear *cont
 	return nil
 }
 
-func ensureScoreScale(ctx context.Context, service *content.Service, examYear *content.ExamYear, kimNumbers []content.KimNumber, profile bool) error {
+func ensureScoreScale(ctx context.Context, service *content.Service, examYear *content.ExamYear, kimNumbers []content.KimNumber, scoreMode string) error {
 	scales, err := service.ListScoreScales(ctx, examYear.ID)
 	if err != nil {
 		return err
@@ -321,7 +327,7 @@ func ensureScoreScale(ctx context.Context, service *content.Service, examYear *c
 	for primary := 0; primary <= maxPrimary; primary++ {
 		testScore := primary
 		var grade *int
-		if profile {
+		if scoreMode == scoreModeTest {
 			testScore = primary * 4
 			if testScore > 100 {
 				testScore = 100

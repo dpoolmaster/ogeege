@@ -4,7 +4,7 @@ import { api } from '../api'
 
 const items = ref([])
 const error = ref('')
-const form = reactive({ code: '', title: '', subject: 'math' })
+const form = reactive({ code: '', title: '', subject: '' })
 
 async function load() {
   try {

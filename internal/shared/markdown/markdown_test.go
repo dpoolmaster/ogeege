@@ -74,6 +74,8 @@ func TestValidateFormulas(t *testing.T) {
 		{name: "незакрытое окружение", source: `$\begin{matrix}1$`, wantErr: true},
 		{name: "несбалансированный left", source: `$\left( x$`, wantErr: true},
 		{name: "пустая формула", source: `$$`, wantErr: true},
+		{name: "одиночный доллар в тексте", source: `цена 5$`},
+		{name: "доллар в середине текста", source: `стоимость $5 без формулы`},
 	}
 
 	for _, tt := range tests {

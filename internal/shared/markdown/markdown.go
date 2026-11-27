@@ -90,8 +90,14 @@ func mathSegments(source string) []string {
 
 		end := strings.Index(source[start:], delimiter)
 		if end < 0 {
-			segments = append(segments, source[start:])
-			break
+			// Незакрытый $$ — ошибка разметки. Одиночный $ без пары считаем
+			// литералом (цена, символ) и продолжаем поиск, чтобы не ломать
+			// сохранение условий в треках без формул.
+			if delimiter == "$$" {
+				segments = append(segments, source[start:])
+				break
+			}
+			continue
 		}
 
 		segments = append(segments, source[start:start+end])
