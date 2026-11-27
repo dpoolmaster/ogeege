@@ -32,6 +32,7 @@ func NewHandler(contentAdmin ContentAdmin, service *Service, store storage.Store
 
 // Register регистрирует маршруты управления контентом.
 func (h *Handler) Register(group *gin.RouterGroup) {
+	group.GET("/subjects", h.listSubjects)
 	group.GET("/exams", h.listExams)
 	group.POST("/exams", h.createExam)
 	group.GET("/exams/:id", h.getExam)
@@ -99,6 +100,10 @@ func (h *Handler) RegisterAdminOnly(group *gin.RouterGroup) {
 	group.GET("/users", h.listUsers)
 	group.PATCH("/users/:id", h.patchUser)
 	group.GET("/audit", h.listAudit)
+}
+
+func (h *Handler) listSubjects(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"items": content.Subjects()})
 }
 
 func (h *Handler) listExams(c *gin.Context) {

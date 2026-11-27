@@ -203,6 +203,46 @@ func TestServiceRoleIndependentValidation(t *testing.T) {
 	}
 }
 
+func TestValidSubject(t *testing.T) {
+	tests := []struct {
+		name  string
+		code  string
+		valid bool
+	}{
+		{name: "математика", code: "math", valid: true},
+		{name: "физика", code: "physics", valid: true},
+		{name: "русский", code: "russian", valid: true},
+		{name: "информатика", code: "informatics", valid: true},
+		{name: "неизвестный", code: "chemistry", valid: false},
+		{name: "пустой", code: "", valid: false},
+		{name: "регистр", code: "Math", valid: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ValidSubject(tt.code); got != tt.valid {
+				t.Fatalf("ValidSubject(%q) = %v, ожидалось %v", tt.code, got, tt.valid)
+			}
+		})
+	}
+}
+
+func TestCreateExamRejectsUnknownSubject(t *testing.T) {
+	service := NewService(&validationRepo{}, nil, fakeTx{}, fixedClock{}, nil, discardLogger())
+	_, err := service.CreateExam(context.Background(), ExamInput{Code: "oge_physics", Title: "ОГЭ физика", Subject: "chemistry"})
+	if err == nil {
+		t.Fatal("ожидалась ошибка для неизвестного предмета")
+	}
+
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("ожидалась ошибка валидации, получено %v", err)
+	}
+	if validationErr.Field != "subject" {
+		t.Fatalf("поле = %q, ожидалось subject", validationErr.Field)
+	}
+}
+
 func TestUpdateTheory(t *testing.T) {
 	theoryID := uuid.Must(uuid.NewV7())
 	base := func(status Status) *Theory {

@@ -81,6 +81,9 @@ func (s *Service) CreateExam(ctx context.Context, in ExamInput) (*Exam, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !ValidSubject(subject) {
+		return nil, invalid("subject", "неизвестный предмет")
+	}
 
 	id, err := ids.New()
 	if err != nil {
@@ -117,6 +120,9 @@ func (s *Service) UpdateExam(ctx context.Context, id uuid.UUID, in ExamInput) (*
 	subject, err := required("subject", in.Subject)
 	if err != nil {
 		return nil, err
+	}
+	if !ValidSubject(subject) {
+		return nil, invalid("subject", "неизвестный предмет")
 	}
 
 	exam, err := s.repo.GetExam(ctx, s.db, id)

@@ -11,6 +11,38 @@ import (
 	"github.com/google/uuid"
 )
 
+// SubjectOption — допустимый предмет трека: код и отображаемое название.
+type SubjectOption struct {
+	Code  string
+	Title string
+}
+
+var subjects = []SubjectOption{
+	{Code: "math", Title: "Математика"},
+	{Code: "physics", Title: "Физика"},
+	{Code: "russian", Title: "Русский язык"},
+	{Code: "informatics", Title: "Информатика"},
+}
+
+// Subjects возвращает допустимые предметы в порядке отображения.
+func Subjects() []SubjectOption {
+	result := make([]SubjectOption, len(subjects))
+	copy(result, subjects)
+
+	return result
+}
+
+// ValidSubject сообщает, входит ли код предмета в список допустимых.
+func ValidSubject(code string) bool {
+	for _, subject := range subjects {
+		if subject.Code == code {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Status — статус публикации сущности контента.
 type Status string
 

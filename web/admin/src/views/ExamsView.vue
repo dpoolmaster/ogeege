@@ -3,13 +3,23 @@ import { onMounted, reactive, ref } from 'vue'
 import { api } from '../api'
 
 const items = ref([])
+const subjects = ref([])
 const error = ref('')
-const form = reactive({ code: '', title: '', subject: '' })
+const form = reactive({ code: '', title: '', subject: 'math' })
 
 async function load() {
   try {
     const data = await api('/admin/exams?limit=200')
     items.value = data.items || []
+  } catch (err) {
+    error.value = err.message
+  }
+}
+
+async function loadSubjects() {
+  try {
+    const data = await api('/admin/subjects')
+    subjects.value = data.items || []
   } catch (err) {
     error.value = err.message
   }
@@ -21,6 +31,7 @@ async function create() {
     await api('/admin/exams', { method: 'POST', body: JSON.stringify(form) })
     form.code = ''
     form.title = ''
+    form.subject = 'math'
     await load()
   } catch (err) {
     error.value = err.message
@@ -48,6 +59,7 @@ async function remove(item) {
 }
 
 onMounted(load)
+onMounted(loadSubjects)
 </script>
 
 <template>
@@ -56,7 +68,10 @@ onMounted(load)
   <form class="admin-form" @submit.prevent="create">
     <input v-model="form.code" placeholder="Код" required />
     <input v-model="form.title" placeholder="Название" required />
-    <input v-model="form.subject" placeholder="Предмет" required />
+    <select v-model="form.subject" required>
+      <option value="" disabled>Предмет</option>
+      <option v-for="subject in subjects" :key="subject.Code" :value="subject.Code">{{ subject.Title }}</option>
+    </select>
     <button type="submit">Создать</button>
   </form>
   <table>
