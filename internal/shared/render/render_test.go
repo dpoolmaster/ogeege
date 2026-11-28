@@ -136,6 +136,62 @@ func tokenValue(t *testing.T, tokens map[string]string, name string) string {
 	return value
 }
 
+func TestShellNavOverridesPico(t *testing.T) {
+	data, err := assetsFS.ReadFile("assets/app.css")
+	if err != nil {
+		t.Fatalf("прочитать app.css: %v", err)
+	}
+	css := string(data)
+
+	tests := []struct {
+		selector string
+		property string
+		want     string
+	}{
+		{selector: ".v-shell__nav", property: "display", want: "block"},
+		{selector: ".v-shell__nav ul", property: "display", want: "block"},
+		{selector: ".v-shell__nav ul:first-of-type", property: "margin-left", want: "0"},
+		{selector: ".v-shell__nav li", property: "display", want: "block"},
+		{selector: ".v-shell__nav a", property: "margin", want: "0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.selector, func(t *testing.T) {
+			body, ok := cssRuleBody(css, tt.selector)
+			if !ok {
+				t.Fatalf("не найдено правило %s", tt.selector)
+			}
+			pattern := regexp.MustCompile(`(?:^|[;\s])` + tt.property + `:\s*([^;]+);`)
+			match := pattern.FindStringSubmatch(body)
+			if match == nil {
+				t.Fatalf("в правиле %s не найдено свойство %s", tt.selector, tt.property)
+			}
+			if got := strings.TrimSpace(match[1]); got != tt.want {
+				t.Fatalf("%s { %s } = %q, ожидалось %q", tt.selector, tt.property, got, tt.want)
+			}
+		})
+	}
+}
+
+func cssRuleBody(css, selector string) (string, bool) {
+	index := strings.Index(css, selector)
+	if index < 0 {
+		return "", false
+	}
+	rest := css[index:]
+	open := strings.Index(rest, "{")
+	if open < 0 {
+		return "", false
+	}
+	rest = rest[open+1:]
+	close := strings.Index(rest, "}")
+	if close < 0 {
+		return "", false
+	}
+
+	return rest[:close], true
+}
+
 func ruleColor(t *testing.T, css, selector string) string {
 	t.Helper()
 

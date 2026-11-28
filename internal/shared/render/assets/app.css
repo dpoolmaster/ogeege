@@ -663,6 +663,7 @@ table th {
 }
 
 .v-table-wrap {
+	position: relative;
 	max-width: 100%;
 	overflow-x: auto;
 	border: 1px solid var(--v-line);
@@ -1168,6 +1169,7 @@ table th {
 }
 
 .v-shell__nav {
+	display: block;
 	background: var(--v-surface);
 	border-right: 1px solid var(--v-line);
 	padding: var(--v-space-4);
@@ -1188,7 +1190,24 @@ table th {
 }
 
 .v-shell__nav ul {
+	display: block;
 	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.v-shell__nav ul:first-of-type,
+.v-shell__nav ul:last-of-type,
+.v-tabs ul:first-of-type,
+.v-tabs ul:last-of-type,
+.v-crumbs ol:first-of-type,
+.v-crumbs ol:last-of-type {
+	margin-left: 0;
+	margin-right: 0;
+}
+
+.v-shell__nav li {
+	display: block;
 	margin: 0;
 	padding: 0;
 }
@@ -1197,6 +1216,7 @@ table th {
 	display: flex;
 	align-items: center;
 	min-height: 44px;
+	margin: 0;
 	padding: 0 var(--v-space-2);
 	border-radius: var(--v-r-field);
 	color: var(--v-ink-2);

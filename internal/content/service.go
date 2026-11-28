@@ -553,6 +553,11 @@ func (s *Service) ListKimTopics(ctx context.Context, kimNumberID uuid.UUID) ([]K
 	return s.repo.ListKimTopics(ctx, s.db, kimNumberID)
 }
 
+// ListKimTopicsByExamYear возвращает все связи тем учебного года одним запросом.
+func (s *Service) ListKimTopicsByExamYear(ctx context.Context, examYearID uuid.UUID) ([]KimTopic, error) {
+	return s.repo.ListKimTopicsByExamYear(ctx, s.db, examYearID)
+}
+
 func (s *Service) validateParent(ctx context.Context, examID uuid.UUID, parentID *uuid.UUID) error {
 	if parentID == nil {
 		return nil

@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS learning.session_results;
+DROP TABLE IF EXISTS learning.kim_mastery;
+DROP TABLE IF EXISTS learning.topic_mastery;
+DROP TABLE IF EXISTS learning.answers;
+DROP TABLE IF EXISTS learning.session_items;
+DROP TABLE IF EXISTS learning.sessions;
+DROP TABLE IF EXISTS learning.plan_items;
+DROP TABLE IF EXISTS learning.plan_weeks;
+DROP TABLE IF EXISTS learning.study_plans;

@@ -174,7 +174,7 @@ func ProfilePageView(data PageViewData) templ.Component {
 				ctx = templ.InitializeContext(ctx)
 				templ_7745c5c3_Err = ui.EmptyState(ui.EmptyStateProps{
 					Title: "Цель пока не задана",
-					Text:  "Выберите трек и дату экзамена в онбординге.",
+					Text:  "Задайте цель: выберите трек и дату экзамена.",
 				}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err

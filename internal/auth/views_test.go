@@ -249,7 +249,7 @@ func TestAccountPage(t *testing.T) {
 			t.Fatalf("статус = %d", rec.Code)
 		}
 		body := rec.Body.String()
-		for _, part := range []string{"student@example.ru", "Ученик", "Активен", "Выйти", `action="/logout"`} {
+		for _, part := range []string{"student@example.ru", "Ученик", "Активен", "Выйти", `action="/logout"`, `href="/app"`, "Личный кабинет"} {
 			if !strings.Contains(body, part) {
 				t.Fatalf("страница не содержит %q: %s", part, body)
 			}

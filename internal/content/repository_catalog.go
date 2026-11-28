@@ -215,6 +215,14 @@ FROM content.kim_topics
 WHERE kim_number_id = $1 AND topic_id = $2
 `
 
+const listKimTopicsByExamYearQuery = `
+SELECT kt.kim_number_id, kt.topic_id, kt.weight::float8
+FROM content.kim_topics kt
+JOIN content.kim_numbers kn ON kn.id = kt.kim_number_id
+WHERE kn.exam_year_id = $1
+ORDER BY kt.kim_number_id, kt.topic_id
+`
+
 // CreateTopic сохраняет тему.
 func (r *PgRepository) CreateTopic(ctx context.Context, q db.Querier, topic *Topic) error {
 	if _, err := q.Exec(ctx, createTopicQuery,
@@ -314,6 +322,29 @@ func (r *PgRepository) ListKimTopics(ctx context.Context, q db.Querier, kimNumbe
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("прочитать связи тем: %w", err)
+	}
+
+	return topics, nil
+}
+
+// ListKimTopicsByExamYear возвращает все связи тем учебного года одним запросом.
+func (r *PgRepository) ListKimTopicsByExamYear(ctx context.Context, q db.Querier, examYearID uuid.UUID) ([]KimTopic, error) {
+	rows, err := q.Query(ctx, listKimTopicsByExamYearQuery, examYearID)
+	if err != nil {
+		return nil, fmt.Errorf("выбрать связи тем учебного года: %w", err)
+	}
+	defer rows.Close()
+
+	var topics []KimTopic
+	for rows.Next() {
+		var topic KimTopic
+		if err := rows.Scan(&topic.KimNumberID, &topic.TopicID, &topic.Weight); err != nil {
+			return nil, fmt.Errorf("прочитать связь темы: %w", err)
+		}
+		topics = append(topics, topic)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("прочитать связи тем учебного года: %w", err)
 	}
 
 	return topics, nil

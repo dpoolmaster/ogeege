@@ -16,6 +16,7 @@ import (
 	"oge-ege/internal/auth"
 	"oge-ege/internal/content"
 	"oge-ege/internal/help"
+	"oge-ege/internal/learning"
 	"oge-ege/internal/notify"
 	"oge-ege/internal/profile"
 	"oge-ege/internal/publicsite"
@@ -106,6 +107,8 @@ func run() error {
 	csrf := httpserver.NewCSRF(cfg.App.SessionSecret, cfg.App.Env == "production", auth.SessionTokenFromRequest)
 	authHandler := auth.NewHandler(authService, csrf, profileService, logger, cfg.App.BrandName)
 	profileHandler := profile.NewHandler(profileService, logger)
+	learningService := learning.NewService(learning.NewPgRepository(), pool, txManager, clk, profileService, contentService, logger)
+	learningHandler := learning.NewHandler(learningService, csrf, logger, cfg.App.BrandName)
 
 	publicRepo := publicsite.NewPgRepository()
 	publicService := publicsite.NewService(
@@ -133,7 +136,7 @@ func run() error {
 		MigrationChecker: db.NewMigrationChecker(db.NewPgMigrationStateReader(pool), latestMigration),
 		CSRF:             csrf.Middleware(),
 		Routes: func(router *gin.Engine) {
-			registerRoutes(router, authService, authHandler, profileHandler, adminHandler, helpHandler, publicHandler, storageStore, loginLimiter, apiLimiter)
+			registerRoutes(router, authService, authHandler, profileHandler, learningHandler, adminHandler, helpHandler, publicHandler, storageStore, loginLimiter, apiLimiter)
 		},
 	})
 
@@ -185,6 +188,7 @@ func registerRoutes(
 	authService *auth.Service,
 	authHandler *auth.Handler,
 	profileHandler *profile.Handler,
+	learningHandler *learning.Handler,
 	adminHandler *admin.Handler,
 	helpHandler *help.Handler,
 	publicHandler *publicsite.Handler,
@@ -225,6 +229,12 @@ func registerRoutes(
 
 	authRoutes.POST("/logout", auth.Auth(authService), authHandler.Logout)
 	authRoutes.POST("/password/change", auth.Auth(authService), authHandler.ChangePassword)
+
+	appPages := router.Group("", auth.AuthPage(authService))
+	learningHandler.RegisterHTML(appPages)
+
+	learningAPI := api.Group("", auth.Auth(authService))
+	learningHandler.RegisterJSON(learningAPI)
 
 	me := api.Group("/me", auth.Auth(authService))
 	me.GET("", profileHandler.Me)

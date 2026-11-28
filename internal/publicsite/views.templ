@@ -538,8 +538,13 @@ templ DemoResultView(result *DemoResult, brand string, viewer Viewer) {
 			Rows: topicRows(result.Topics),
 			Caption: "Разбивка результата по темам",
 		})
-		<p>Полный отчёт с рекомендациями доступен после регистрации.</p>
-		<p><a class="v-btn v-btn--primary v-btn--md" href="/register">Зарегистрироваться</a></p>
+		if viewer.SignedIn {
+			<p>Полный отчёт с рекомендациями доступен в личном кабинете.</p>
+			<p><a class="v-btn v-btn--primary v-btn--md" href="/app">Перейти в кабинет</a></p>
+		} else {
+			<p>Полный отчёт с рекомендациями доступен после регистрации.</p>
+			<p><a class="v-btn v-btn--primary v-btn--md" href="/register">Зарегистрироваться</a></p>
+		}
 	}
 }
 

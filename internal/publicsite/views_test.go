@@ -163,3 +163,34 @@ func TestDemoStepViewHasProgressAndAutofocus(t *testing.T) {
 		}
 	}
 }
+
+func TestDemoResultViewAnonymousShowsRegister(t *testing.T) {
+	result := &DemoResult{Total: 5, Correct: 3}
+
+	var buf bytes.Buffer
+	if err := DemoResultView(result, "Верно", Viewer{}).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("отрендерить результат демо: %v", err)
+	}
+
+	html := buf.String()
+	if !strings.Contains(html, "Зарегистрироваться") || !strings.Contains(html, `href="/register"`) {
+		t.Fatalf("анониму нужен призыв зарегистрироваться: %s", html)
+	}
+}
+
+func TestDemoResultViewSignedInShowsCabinet(t *testing.T) {
+	result := &DemoResult{Total: 5, Correct: 3}
+
+	var buf bytes.Buffer
+	if err := DemoResultView(result, "Верно", Viewer{SignedIn: true, Label: "student@example.com"}).Render(context.Background(), &buf); err != nil {
+		t.Fatalf("отрендерить результат демо: %v", err)
+	}
+
+	html := buf.String()
+	if strings.Contains(html, "Зарегистрироваться") {
+		t.Fatalf("вошедшему не нужен призыв зарегистрироваться: %s", html)
+	}
+	if !strings.Contains(html, `href="/app"`) || !strings.Contains(html, "Перейти в кабинет") {
+		t.Fatalf("вошедшему нужен переход в кабинет: %s", html)
+	}
+}

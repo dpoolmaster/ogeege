@@ -144,6 +144,10 @@ templ AccountPage(data PageData) {
 			<dt>Статус</dt>
 			<dd>{ data.StatusLabel }</dd>
 		</dl>
+		<nav class="v-actions" aria-label="Разделы аккаунта">
+			@ui.Button(ui.ButtonProps{Label: "Личный кабинет", Href: "/app", Variant: ui.ButtonPrimary})
+			@ui.Button(ui.ButtonProps{Label: "Учебная цель", Href: "/app/goal", Variant: ui.ButtonSecondary})
+		</nav>
 		<form method="post" action="/logout" class="v-form">
 			<input type="hidden" name="csrf_token" value={ data.CSRF }/>
 			@ui.Button(ui.ButtonProps{Label: "Выйти", Type: "submit", Variant: ui.ButtonSecondary})

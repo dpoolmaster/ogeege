@@ -1,0 +1,373 @@
+package learning
+
+import (
+	"strconv"
+
+	"oge-ege/internal/shared/render"
+	"oge-ege/internal/shared/render/ui"
+)
+
+templ CabinetLayout(brand, title string) {
+	<!DOCTYPE html>
+	<html lang="ru">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ render.DocumentTitle(title, brand) }</title>
+			<link rel="icon" href={ render.FaviconPath() } type="image/svg+xml"/>
+			<link rel="preload" href={ render.FontsPath("golos-text-cyrillic.woff2") } as="font" type="font/woff2" crossorigin/>
+			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"/>
+			<link rel="stylesheet" href={ render.StylesPath() }/>
+		</head>
+		<body>
+			<a class="v-skip-link" href="#main-content">Перейти к содержимому</a>
+			{ children... }
+		</body>
+	</html>
+}
+
+templ TodayPage(brand string, data TodayData) {
+	@CabinetLayout(brand, "Сегодня") {
+		@ui.AppShell(ui.AppShellProps{
+			Brand:     brand,
+			PageTitle: "Сегодня",
+			Nav:       cabinetNav("today"),
+		}) {
+			if !data.HasGoal {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title:       "Учебная цель не задана",
+					Text:        "Выберите трек и дату экзамена, чтобы получить персональный план подготовки.",
+					ActionLabel: "Задать цель",
+					ActionHref:  "/app/goal",
+				})
+			} else {
+				@ui.TodayScreen(ui.TodayScreenProps{
+					NextStep:    data.NextStep,
+					NextHref:    data.NextHref,
+					Gaps:        data.Gaps,
+					Goal:        data.Goal,
+					GoalCurrent: data.GoalCurrent,
+					GoalMax:     data.GoalMax,
+				})
+				<nav class="v-actions" aria-label="Разделы подготовки">
+					@ui.Button(ui.ButtonProps{Label: "Диагностика", Href: "/app/diagnostics", Variant: ui.ButtonSecondary})
+					@ui.Button(ui.ButtonProps{Label: "Карта пробелов", Href: "/app/gaps", Variant: ui.ButtonSecondary})
+					@ui.Button(ui.ButtonProps{Label: "План", Href: "/app/plan", Variant: ui.ButtonSecondary})
+				</nav>
+			}
+		}
+	}
+}
+
+templ GoalPage(brand string, data GoalPageData, csrf string) {
+	@CabinetLayout(brand, "Учебная цель") {
+		@ui.AppShell(ui.AppShellProps{
+			Brand:     brand,
+			PageTitle: "Учебная цель",
+			Nav:       cabinetNav("goal"),
+		}) {
+			@ui.Card(ui.CardProps{Title: "Учебная цель", Meta: "Трек, дата экзамена и доступное время"}) {
+				if data.AlreadyHasGoal {
+					@ui.Toast(ui.ToastProps{Tone: ui.ToneAccent, Text: "Цель уже задана. Сохранение обновит её и пересоберёт план; история целей сохранится."})
+				}
+				if data.FormError != "" {
+					@ui.Toast(ui.ToastProps{Tone: ui.ToneErr, Text: data.FormError})
+				}
+				<form method="post" action="/app/goal" class="v-form">
+					<input type="hidden" name="csrf_token" value={ csrf }/>
+					<div class={ selectClass(data.FieldErrors["exam_code"]) }>
+						<label for="field-exam_code">Учебный трек</label>
+						<select id="field-exam_code" name="exam_code" aria-invalid={ ariaInvalid(data.FieldErrors["exam_code"]) } required>
+							<option value="">Выберите трек</option>
+							for _, exam := range data.Exams {
+								<option value={ exam.Code } selected?={ data.Input.ExamCode == exam.Code }>{ exam.Title }</option>
+							}
+						</select>
+						if data.FieldErrors["exam_code"] != "" {
+							<p class="v-field__error" id="field-exam_code-error">{ data.FieldErrors["exam_code"] }</p>
+						}
+					</div>
+					@ui.Field(ui.FieldProps{
+						Label: "Дата экзамена",
+						Name:  "exam_date",
+						Type:  "date",
+						Value: data.Input.ExamDate,
+						Error: data.FieldErrors["exam_date"],
+						Required: true,
+					})
+					@ui.Field(ui.FieldProps{
+						Label: "Целевой балл",
+						Name:  "target_score",
+						Type:  "number",
+						Value: strconv.Itoa(data.Input.TargetScore),
+						Error: data.FieldErrors["target_score"],
+						Required: true,
+					})
+					@ui.Field(ui.FieldProps{
+						Label: "Минут в неделю",
+						Name:  "weekly_minutes",
+						Type:  "number",
+						Value: strconv.Itoa(data.Input.WeeklyMinutes),
+						Error: data.FieldErrors["weekly_minutes"],
+						Required: true,
+					})
+					if data.AlreadyHasGoal {
+						@ui.Button(ui.ButtonProps{Label: "Изменить цель", Type: "submit", Variant: ui.ButtonPrimary})
+					} else {
+						@ui.Button(ui.ButtonProps{Label: "Задать цель", Type: "submit", Variant: ui.ButtonPrimary})
+					}
+				</form>
+			}
+		}
+	}
+}
+
+templ DiagnosticsPage(brand string, data DiagnosticStartData, csrf string) {
+	@CabinetLayout(brand, "Диагностика") {
+		@ui.AppShell(ui.AppShellProps{
+			Brand:     brand,
+			PageTitle: "Диагностика",
+			Nav:       cabinetNav("diagnostics"),
+		}) {
+			if data.HasActive {
+				@ui.Card(ui.CardProps{Title: "Незавершённая диагностика", Meta: "Можно продолжить"}) {
+					<p>У вас есть незавершённая диагностика. Ответы сохранены.</p>
+					@ui.Button(ui.ButtonProps{Label: "Продолжить", Href: "/app/diagnostics/" + data.ActiveSessionID.String(), Variant: ui.ButtonPrimary})
+				}
+			} else if !data.Available {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title:       "Диагностика недоступна",
+					Text:        data.Reason,
+					ActionLabel: "Открыть план",
+					ActionHref:  "/app/plan",
+					Error:       true,
+				})
+			} else {
+				@ui.Card(ui.CardProps{Title: "Проверка уровня", Meta: "Все номера КИМ"}) {
+					<p>Диагностика покрывает все номера КИМ выбранного трека.</p>
+					<p>Заданий: { strconv.Itoa(data.TaskCount) }. Оценка длительности: { strconv.Itoa(data.DurationMinutes) } мин.</p>
+					<form method="post" action="/app/diagnostics" class="v-form">
+						<input type="hidden" name="csrf_token" value={ csrf }/>
+						@ui.Button(ui.ButtonProps{Label: "Начать диагностику", Type: "submit", Variant: ui.ButtonPrimary})
+					</form>
+				}
+			}
+		}
+	}
+}
+
+templ SessionPage(brand string, view SessionView, csrf string) {
+	@CabinetLayout(brand, "Диагностика") {
+		@ui.AppShell(ui.AppShellProps{
+			Brand:     brand,
+			PageTitle: "Диагностика",
+			Nav:       cabinetNav("diagnostics"),
+		}) {
+			if len(view.Items) == 0 {
+				@ui.EmptyState(ui.EmptyStateProps{Title: "Заданий нет", Text: "В диагностике нет заданий.", ActionLabel: "К диагностике", ActionHref: "/app/diagnostics"})
+			} else {
+				@ui.Progress(ui.ProgressProps{Value: view.CurrentIndex + 1, Max: len(view.Items), Label: "Задание"})
+				if view.CurrentIndex >= 0 && view.CurrentIndex < len(view.Items) {
+					{{ item := view.Items[view.CurrentIndex] }}
+					@ui.Card(ui.CardProps{Title: "Задание " + strconv.Itoa(item.Item.Position), Meta: "Задание диагностики"}) {
+						<p class="v-task__statement">{ item.Snapshot.StatementMD }</p>
+						for _, attachment := range item.Snapshot.Attachments {
+							<img src={ attachment.URL } alt={ attachment.Alt } class="v-task__image"/>
+						}
+						if item.Answer != nil {
+							@ui.ResultPanel(ui.ResultPanelProps{
+								Correct: item.Answer.IsCorrect,
+								Title:   "Ответ проверен",
+								Text:    "Ваш ответ: " + item.Answer.RawAnswer,
+							})
+						}
+						<form method="post" action={ "/app/diagnostics/" + view.Session.ID.String() + "/items/" + item.Item.ID.String() } class="v-form">
+							<input type="hidden" name="csrf_token" value={ csrf }/>
+							@ui.Field(ui.FieldProps{
+								Label:    "Ответ",
+								Name:     "answer",
+								Value:    answerText(item.Answer),
+								Required: true,
+							})
+							@ui.Button(ui.ButtonProps{Label: "Сохранить ответ", Type: "submit", Variant: ui.ButtonPrimary})
+						</form>
+						<nav class="v-actions" aria-label="Навигация по заданиям">
+							if view.CurrentIndex > 0 {
+								@ui.Button(ui.ButtonProps{Label: "Предыдущее", Href: "/app/diagnostics/" + view.Session.ID.String() + "?item=" + view.Items[view.CurrentIndex-1].Item.ID.String(), Variant: ui.ButtonSecondary})
+							}
+							if view.CurrentIndex+1 < len(view.Items) {
+								@ui.Button(ui.ButtonProps{Label: "Следующее", Href: "/app/diagnostics/" + view.Session.ID.String() + "?item=" + view.Items[view.CurrentIndex+1].Item.ID.String(), Variant: ui.ButtonSecondary})
+							}
+						</nav>
+					}
+				}
+				<form method="post" action={ "/app/diagnostics/" + view.Session.ID.String() + "/submit" } class="v-form">
+					<input type="hidden" name="csrf_token" value={ csrf }/>
+					@ui.Button(ui.ButtonProps{Label: "Завершить диагностику", Type: "submit", Variant: ui.ButtonDanger})
+				</form>
+			}
+		}
+	}
+}
+
+templ ResultPage(brand string, view ResultView) {
+	@CabinetLayout(brand, "Результат диагностики") {
+		@ui.AppShell(ui.AppShellProps{
+			Brand:     brand,
+			PageTitle: "Результат диагностики",
+			Nav:       cabinetNav("diagnostics"),
+		}) {
+			@ui.Card(ui.CardProps{Title: "Итог", Meta: "Первичные баллы"}) {
+				<p class="v-score">{ scoreText(view.Result.PrimaryScore) } из { scoreText(view.Result.MaxScore) }</p>
+				@ui.Progress(ui.ProgressProps{Value: resultPercent(view.Result.PrimaryScore, view.Result.MaxScore), Max: 100, Label: "Выполнено"})
+			}
+			@ui.Card(ui.CardProps{Title: "Разбивка по заданиям", Meta: "Темы и номера КИМ"}) {
+				@ui.Table(ui.TableProps{
+					Head:    []string{"№", "КИМ", "Тема", "Результат", "Баллы", "Причина"},
+					Caption: "Разбивка результата диагностики",
+					Rows:    resultRows(view),
+				})
+			}
+			@ui.Card(ui.CardProps{Title: "Темы для повторения", Meta: "Приоритеты"}) {
+				if len(view.Topics) == 0 {
+					@ui.EmptyState(ui.EmptyStateProps{Title: "Темы не определены", Text: "В диагностике не было тем."})
+				} else {
+					<ul>
+						for _, topic := range view.Topics {
+							<li>{ topic.Title }: { strconv.Itoa(topic.Correct) } из { strconv.Itoa(topic.Total) }</li>
+						}
+					</ul>
+				}
+			}
+			<nav class="v-actions" aria-label="Дальнейшие действия">
+				@ui.Button(ui.ButtonProps{Label: "Карта пробелов", Href: "/app/gaps", Variant: ui.ButtonPrimary})
+				@ui.Button(ui.ButtonProps{Label: "План подготовки", Href: "/app/plan", Variant: ui.ButtonSecondary})
+			</nav>
+		}
+	}
+}
+
+templ GapsPage(brand string, view GapMapView, hasGoal bool) {
+	@CabinetLayout(brand, "Карта пробелов") {
+		@ui.AppShell(ui.AppShellProps{
+			Brand:     brand,
+			PageTitle: "Карта пробелов",
+			Nav:       cabinetNav("gaps"),
+		}) {
+			if !hasGoal {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title:       "Нужна учебная цель",
+					Text:        "Задайте цель, чтобы построить карту пробелов.",
+					ActionLabel: "Задать цель",
+					ActionHref:  "/app/goal",
+				})
+			} else if !view.HasData {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title:       "Пока нет данных",
+					Text:        "Пройдите диагностику, чтобы увидеть карту пробелов.",
+					ActionLabel: "Начать диагностику",
+					ActionHref:  "/app/diagnostics",
+				})
+			} else {
+				@ui.Card(ui.CardProps{Title: "Тема × номер КИМ", Meta: "Состояние передаётся символом и текстом"}) {
+					@ui.GapHeatmap(ui.GapHeatmapProps{
+						Topics:     view.Topics,
+						KimNumbers: view.KimNumbers,
+						Cells:      view.Cells,
+					})
+				}
+				if len(view.Recommendations) > 0 {
+					@ui.Card(ui.CardProps{Title: "Что повторить первым", Meta: "Приоритет по весу и освоению"}) {
+						<ul class="v-today__gaps">
+							for _, gap := range view.Recommendations {
+								<li>
+									@ui.Badge(gap.Tone, strconv.Itoa(gap.Count))
+									<span>{ gap.Title }</span>
+								</li>
+							}
+						</ul>
+					}
+				}
+				@ui.Button(ui.ButtonProps{Label: "Перейти к плану", Href: "/app/plan", Variant: ui.ButtonPrimary})
+			}
+		}
+	}
+}
+
+templ PlanPage(brand string, view PlanView, csrf string) {
+	@CabinetLayout(brand, "План подготовки") {
+		@ui.AppShell(ui.AppShellProps{
+			Brand:     brand,
+			PageTitle: "План подготовки",
+			Nav:       cabinetNav("plan"),
+		}) {
+			if !view.HasGoal {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title:       "Нужна учебная цель",
+					Text:        "Задайте цель, чтобы получить недельный план.",
+					ActionLabel: "Задать цель",
+					ActionHref:  "/app/goal",
+				})
+			} else if view.Reason != "" {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title:       "План недоступен",
+					Text:        view.Reason,
+					ActionLabel: "Изменить цель",
+					ActionHref:  "/app/goal",
+					Error:       true,
+				})
+			} else if view.Empty {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title:       "План пуст",
+					Text:        "Не удалось построить недели плана. Попробуйте пересчитать план.",
+					ActionLabel: "Пересчитать",
+					ActionHref:  "/app/plan",
+				})
+			} else {
+				<p>Версия плана { strconv.Itoa(view.Plan.Version) }, цель { strconv.Itoa(view.Plan.TargetScore) } баллов к { formatDate(view.Plan.ExamDate) }.</p>
+				for _, week := range view.Weeks {
+					@ui.Card(ui.CardProps{Title: "Неделя с " + formatDate(week.Week.WeekStart), Meta: phaseLabel(week.Week.Phase)}) {
+						<ul class="v-plan">
+							for _, item := range week.Items {
+								<li>
+									<span class="v-plan__day">День { strconv.Itoa(item.Item.DayOfWeek) }</span>
+									<span>{ kindLabel(item.Item.Kind) }: { itemTarget(item) }, заданий { strconv.Itoa(item.Item.TaskCount) }</span>
+									if item.Done {
+										@ui.Badge(ui.ToneOK, statusLabel(item.Item.Status))
+									} else {
+										<form method="post" action={ "/app/plan/items/" + item.Item.ID.String() + "/complete" }>
+											<input type="hidden" name="csrf_token" value={ csrf }/>
+											@ui.Button(ui.ButtonProps{Label: "Отметить", Type: "submit", Variant: ui.ButtonSecondary, Size: ui.ButtonSmall})
+										</form>
+									}
+								</li>
+							}
+						</ul>
+					}
+				}
+				<form method="post" action="/app/plan/replan" class="v-form">
+					<input type="hidden" name="csrf_token" value={ csrf }/>
+					@ui.Button(ui.ButtonProps{Label: "Пересчитать план", Type: "submit", Variant: ui.ButtonPrimary})
+				</form>
+			}
+		}
+	}
+}
+
+templ ErrorPage(brand string, status int, message string) {
+	@CabinetLayout(brand, "Ошибка") {
+		@ui.AppShell(ui.AppShellProps{
+			Brand:     brand,
+			PageTitle: "Ошибка " + strconv.Itoa(status),
+			Nav:       cabinetNav(""),
+		}) {
+			@ui.EmptyState(ui.EmptyStateProps{
+				Title:       "Не удалось открыть раздел",
+				Text:        message,
+				ActionLabel: "Вернуться в кабинет",
+				ActionHref:  "/app",
+				Error:       true,
+			})
+		}
+	}
+}

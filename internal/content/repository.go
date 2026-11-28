@@ -50,6 +50,7 @@ type Repository interface {
 	DeleteTopic(ctx context.Context, q db.Querier, id uuid.UUID) error
 	ReplaceKimTopics(ctx context.Context, q db.Querier, kimNumberID uuid.UUID, topics []KimTopic) error
 	ListKimTopics(ctx context.Context, q db.Querier, kimNumberID uuid.UUID) ([]KimTopic, error)
+	ListKimTopicsByExamYear(ctx context.Context, q db.Querier, examYearID uuid.UUID) ([]KimTopic, error)
 	GetKimTopic(ctx context.Context, q db.Querier, kimNumberID, topicID uuid.UUID) (*KimTopic, error)
 
 	CreateTheory(ctx context.Context, q db.Querier, theory *Theory) error
