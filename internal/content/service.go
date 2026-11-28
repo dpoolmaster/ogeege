@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"oge-ege/internal/grading"
 	"oge-ege/internal/shared/clock"
 	"oge-ege/internal/shared/db"
 	"oge-ege/internal/shared/ids"
@@ -618,25 +619,14 @@ func validateAnswerSpec(spec []byte) error {
 	if len(spec) == 0 {
 		return invalid("answer_spec", "правила проверки обязательны")
 	}
-
-	var payload struct {
-		Kind string `json:"kind"`
-	}
-	if err := jsonUnmarshal(spec, &payload); err != nil {
+	if err := grading.Validate(json.RawMessage(spec)); err != nil {
+		if errors.Is(err, grading.ErrUnknownKind) {
+			return invalid("answer_spec", "неизвестный тип правил проверки")
+		}
+		if errors.Is(err, grading.ErrInvalidSpec) {
+			return invalid("answer_spec", err.Error())
+		}
 		return invalid("answer_spec", "правила проверки должны быть корректным JSON")
-	}
-
-	switch payload.Kind {
-	case "number", "interval", "digits", "extended", "text", "choice":
-		return nil
-	default:
-		return invalid("answer_spec", "неизвестный тип правил проверки")
-	}
-}
-
-func jsonUnmarshal(data []byte, value any) error {
-	if err := json.Unmarshal(data, value); err != nil {
-		return fmt.Errorf("разобрать JSON: %w", err)
 	}
 
 	return nil

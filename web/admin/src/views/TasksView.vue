@@ -23,7 +23,8 @@ const form = reactive({
   answer_spec: '{"kind":"number","accepted":["1"]}',
   answer_display: '1',
   source: 'seed',
-  source_ref: ''
+  source_ref: '',
+  options: []
 })
 
 const examTitles = computed(() => {
@@ -119,6 +120,7 @@ function edit(item) {
   form.answer_display = item.answer_display
   form.source = item.source
   form.source_ref = item.source_ref
+  form.options = (item.options || []).map((option) => ({ ...option }))
 }
 
 function resetForm() {
@@ -126,6 +128,23 @@ function resetForm() {
   form.statement_md = ''
   form.answer_spec = '{"kind":"number","accepted":["1"]}'
   form.answer_display = '1'
+  form.options = []
+}
+
+function addOption() {
+  form.options.push({
+    id: crypto.randomUUID(),
+    position: form.options.length + 1,
+    content_md: '',
+    is_correct: false
+  })
+}
+
+function removeOption(index) {
+  form.options.splice(index, 1)
+  form.options.forEach((option, position) => {
+    option.position = position + 1
+  })
 }
 
 async function save() {
@@ -281,6 +300,21 @@ onMounted(() => {
       answer_spec JSON
       <textarea v-model="form.answer_spec" placeholder="answer_spec JSON"></textarea>
     </label>
+    <fieldset class="admin-field">
+      <legend>Варианты ответа (для choice)</legend>
+      <table v-if="form.options.length">
+        <thead><tr><th>Позиция</th><th>Содержимое</th><th>Правильный</th><th></th></tr></thead>
+        <tbody>
+          <tr v-for="(option, index) in form.options" :key="option.id">
+            <td>{{ option.position }}</td>
+            <td><input v-model="option.content_md" placeholder="Текст варианта" /></td>
+            <td><input v-model="option.is_correct" type="checkbox" /></td>
+            <td><button type="button" class="secondary" @click="removeOption(index)">Удалить</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <button type="button" class="secondary" @click="addOption">Добавить вариант</button>
+    </fieldset>
     <button type="submit">Сохранить</button>
     <button v-if="editingId" type="button" class="secondary" @click="resetForm">Отмена</button>
   </form>
@@ -292,7 +326,7 @@ onMounted(() => {
   <h3>Импорт</h3>
   <div class="admin-field">
     <span>JSON для импорта</span>
-    <textarea v-model="importText" placeholder='[{"exam_year_id":"...","kim_number_id":"...","difficulty":"easy","statement_md":"...","answer_spec":{"kind":"number","accepted":["1"]},"source":"seed"}]'></textarea>
+    <textarea v-model="importText" placeholder='[{"exam_year_id":"...","kim_number_id":"...","difficulty":"easy","statement_md":"...","answer_spec":{"kind":"choice","option_ids":["<uuid>"]},"source":"seed","options":[{"id":"<uuid>","position":1,"content_md":"...","is_correct":true}]}]'></textarea>
   </div>
   <button @click="importTasks">Импортировать</button>
 

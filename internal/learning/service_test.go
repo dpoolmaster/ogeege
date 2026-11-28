@@ -83,7 +83,7 @@ func TestSetupGoalValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := NewService(nil, nil, nil, clock.New(), &fakeGoalProvider{}, tt.content, testLogger())
+			service := NewService(nil, nil, nil, clock.New(), &fakeGoalProvider{}, tt.content, nil, testLogger())
 			if _, err := service.SetupGoal(context.Background(), uuid.New(), tt.input); !errors.Is(err, tt.want) {
 				t.Fatalf("ошибка = %v, ожидалась %v", err, tt.want)
 			}
@@ -92,7 +92,7 @@ func TestSetupGoalValidation(t *testing.T) {
 }
 
 func TestPlanViewWithoutGoal(t *testing.T) {
-	service := NewService(nil, nil, nil, clock.New(), &fakeGoalProvider{}, &fakeContentProvider{}, testLogger())
+	service := NewService(nil, nil, nil, clock.New(), &fakeGoalProvider{}, &fakeContentProvider{}, nil, testLogger())
 	view, err := service.PlanView(context.Background(), uuid.New())
 	if err != nil {
 		t.Fatalf("неожиданная ошибка: %v", err)
@@ -107,7 +107,7 @@ func TestPlanViewPastExamDate(t *testing.T) {
 		ExamDate:    time.Now().UTC().AddDate(0, 0, -1),
 		TargetScore: 50,
 	}}
-	service := NewService(nil, nil, nil, clock.New(), goals, &fakeContentProvider{}, testLogger())
+	service := NewService(nil, nil, nil, clock.New(), goals, &fakeContentProvider{}, nil, testLogger())
 	view, err := service.PlanView(context.Background(), uuid.New())
 	if err != nil {
 		t.Fatalf("неожиданная ошибка: %v", err)

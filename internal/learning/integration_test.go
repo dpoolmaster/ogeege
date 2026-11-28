@@ -107,6 +107,10 @@ func (f *fakeContentProvider) ListTaskAttachments(context.Context, uuid.UUID) ([
 	return nil, nil
 }
 
+func (f *fakeContentProvider) ListTaskOptions(context.Context, uuid.UUID) ([]content.TaskOption, error) {
+	return nil, nil
+}
+
 func TestServiceIntegration(t *testing.T) {
 	databaseURL, _ := os.LookupEnv("TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -160,7 +164,7 @@ func TestServiceIntegration(t *testing.T) {
 	}
 	goals := &fakeGoalProvider{}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	service := NewService(NewPgRepository(), pool, db.NewTxManager(pool), clock.New(), goals, contentProvider, logger)
+	service := NewService(NewPgRepository(), pool, db.NewTxManager(pool), clock.New(), goals, contentProvider, nil, logger)
 
 	plan, err := service.SetupGoal(ctx, userID, GoalInput{
 		ExamCode:      "it_math",
@@ -304,7 +308,7 @@ func TestSetupGoalFailureIntegration(t *testing.T) {
 	examID := uuid.New()
 	contentProvider := &fakeContentProvider{exam: content.Exam{ID: examID, Code: "it_math", Status: content.StatusPublished}}
 	goals := &fakeGoalProvider{saveErr: errors.New("цель не сохранена")}
-	service := NewService(NewPgRepository(), pool, db.NewTxManager(pool), clock.New(), goals, contentProvider, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	service := NewService(NewPgRepository(), pool, db.NewTxManager(pool), clock.New(), goals, contentProvider, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	if _, err := service.SetupGoal(ctx, userID, GoalInput{
 		ExamCode:      "it_math",
@@ -353,7 +357,7 @@ func TestResultNotReadyIntegration(t *testing.T) {
 	})
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	service := NewService(repo, pool, db.NewTxManager(pool), clock.New(), &fakeGoalProvider{}, &fakeContentProvider{}, logger)
+	service := NewService(repo, pool, db.NewTxManager(pool), clock.New(), &fakeGoalProvider{}, &fakeContentProvider{}, nil, logger)
 	if _, err := service.Result(ctx, userID, session.ID); !errors.Is(err, ErrResultNotReady) {
 		t.Fatalf("ожидалась ошибка незавершённой сессии, получено %v", err)
 	}

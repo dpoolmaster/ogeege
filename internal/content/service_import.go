@@ -65,6 +65,7 @@ func (s *Service) importOne(ctx context.Context, item ImportItem) (*Task, error)
 		Source:        item.Source,
 		SourceRef:     item.SourceRef,
 		CreatedBy:     item.CreatedBy,
+		Options:       item.Options,
 	}
 
 	hash := ContentHash(input.StatementMD)

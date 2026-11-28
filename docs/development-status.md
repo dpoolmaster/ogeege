@@ -22,7 +22,7 @@
 | 3.5  | Дизайн-система и интерфейс           | `ui-design-system`                        | реализован |
 | 3.6  | Вовлечение публичного контура        | `public-site-engagement`                  | реализован |
 | 4    | Диагностика, карта пробелов, план    | `stage-4-diagnostics-gap-map-plan`        | реализован |
-| 5    | Практика и автопроверка              | `stage-5-practice-autocheck`              | спланирован |
+| 5    | Практика и автопроверка              | `stage-5-practice-autocheck`              | реализован |
 | 6    | Пробники, таймер, шкалы              | `stage-6-trial-exam-scales`               | не начат   |
 | 7    | AI-контур и проверка части 2         | `stage-7-ai-extended-answers`             | не начат   |
 | 8    | Прогресс, прогноз, родитель          | `stage-8-progress-forecast-parent`        | не начат   |
@@ -31,13 +31,13 @@
 
 ## Следующий шаг
 
-**Реализовать этап 5 — Практика и автопроверка.**
+**Реализовать этап 6 — Пробники, таймер, шкалы.**
 
-- Change `stage-5-practice-autocheck` спланирован: capabilities `grading` (8 требований), `learning` (6 требований), `content` (3 требования); 11 групп и 60 задач; `openspec validate --strict` проходит.
-- Ключевые решения: `choice` end-to-end через `content.task_options`, публичный банк остаётся на `number/text/digits/interval`; практика — 10 заданий по теме/КИМ или `task_count` плана (до 20); повторение — по должным темам и ранее неверным заданиям; интервалы обновляются один раз на тему за сессию; `plan_item_id` связывает сессию с планом.
-- Миграция `000011_learning_practice`: `review` в `sessions.kind` и nullable `plan_item_id`.
+- Этап 5 завершён: все 60 задач change `stage-5-practice-autocheck` выполнены, `templ generate`, `go build ./...`, `go test ./...` и `golangci-lint run ./...` зелёные.
+- Ключевые решения: реестр `grading` с `Kinds/CheckableKinds/PublicKinds/Validate/Check`; `choice` end-to-end через `content.task_options`; практика — 10 заданий по теме/КИМ или `task_count` плана (до 20); повторение — по должным темам и ранее неверным заданиям; интервалы обновляются один раз на тему за сессию; `plan_item_id` связывает сессию с планом.
+- Миграция `000011_learning_practice`: `review` в `sessions.kind` и nullable `plan_item_id`; проверено `up → down 1 → up`.
 - Конфликт ТЗ: `FR-GRADE-09` (часть 2) исключён из этапа 5 и перенесён на этап 7.
-- После реализации этапа 5 следующий шаг — этап 6. Этапы 4, 5 и 6 нельзя менять местами.
+- Этапы 4, 5 и 6 нельзя менять местами.
 
 ## Детали по этапам
 
@@ -146,13 +146,15 @@ Change: `stage-4-diagnostics-gap-map-plan` (заархивирован как `2
 
 ### Этап 5. Практика и автопроверка — L
 
-Change: `stage-5-practice-autocheck` (спланирован).
+Change: `stage-5-practice-autocheck` (заархивирован как `2026-11-28-stage-5-practice-autocheck`).
 
 - Capability: `grading` (8 требований, новая), `learning` (6 требований), `content` (3 требования).
 - Ключевые требования ТЗ: FR-GRADE-01…08, 10…13, FR-LEARN-06, 08, 09, 11, FR-CONT-05, 09, FR-ADM-02, 11.
 - Зависимости: этап 4.
 - Артефакты: `proposal.md`, `specs/{grading,learning,content}/spec.md`, `design.md`, `tasks.md` — готовы, `openspec validate --strict` проходит.
-- Задачи: 11 групп, 60 задач.
+- Задачи: 11 групп, 60 задач — выполнены.
+- Реализовано: реестр стратегий `grading` с per-kind `Validate`, `CheckableKinds` и `PublicKinds`; числовая, интервальная, цифровая, текстовая и `choice`-стратегии с покрытием границ; `content.task_options` в создании, редактировании, импорте, административном API и SPA; seed-задание `choice` с фиксированными UUID; сессии `practice` и `review`, снимок с вариантами без признака правильности, мгновенная проверка, возобновление и проверка владельца; освоение и интервальное повторение (60 дней / 2.5 / 1.3, старт 1 день / 2.0); завершение пункта плана; экраны `/app/practice` и `/app/review`, JSON `POST /api/sessions`; миграция `000011_learning_practice`.
+- Проверки: `templ generate`, `go build ./...`, `go test ./...` (включая интеграционные с PostgreSQL), `golangci-lint run ./...` — зелёные; SPA собрана; `go list -deps ./internal/grading` не содержит `learning`, `content` и БД; `publicsite` по-прежнему отклоняет `choice`.
 - Из этапа 2: автопроверка части 1 использует `answer_spec` заданий, формат и валидация уже заданы в `content`.
 - Из этапа 3: `internal/grading` уже создан с общими стратегиями короткого ответа (`number`, `text`, `digits`, `interval`) и используется публичным банком. Этап 5 расширяет реестр (включая `choice`), добавляет per-kind валидацию `answer_spec`, переносит список `kind` из `content` в реестр и подключает проверку к `learning`; библиотека не создаётся заново.
 - Из этапа 4: `learning` уже содержит сессии, снимки заданий, ответы, освоение тем и номеров КИМ и таблицы `interval_days`, `ease`, `next_review_at`. Этап 5 добавляет сессии практики и работы над ошибками, заполняет интервальное повторение и не создаёт новую схему.
@@ -234,3 +236,4 @@ Change: `stage-10-notifications-hardening` (не создан).
 | 2026-11-28 | Этап 4 реализован: задачи 55/55, миграция `000010_learning`, модуль `internal/learning`, тесты и линтер зелёные. Зафиксировано: покрытие номеров КИМ приоритетнее цели 45 минут; таблицы берутся из ТЗ 5.5; перенос анонимного демо в полный отчёт — открытый вопрос. Следующий шаг — этап 5. |
 | 2026-11-28 | Этап 4 заархивирован как `2026-11-28-stage-4-diagnostics-gap-map-plan`; capability `learning` (11 требований, 35 сценариев) синхронизирована в `openspec/specs/learning`. В том же change выполнена группа 13 (60/60 задач): «онбординг» переименован в «учебную цель» (`/app/goal`, `GoalInput`, `GoalPageData`, `SetupGoal`, `ShowGoal`/`SubmitGoal`, `GoalPage`), обновлены ТЗ, `AGENTS.md` и справка. Исправлены левое меню кабинета (перекрытие правил Pico, тест `TestShellNavOverridesPico`) и CTA результата демо для вошедшего пользователя. `templ generate`, `go build`, `go test`, интеграционные тесты `learning`, `golangci-lint` — зелёные. |
 | 2026-11-28 | Этап 5 спланирован: change `stage-5-practice-autocheck`, capabilities `grading` (8 требований, новая), `learning` (6 требований), `content` (3 требования); 11 групп и 60 задач. Артефакты готовы, `openspec validate --strict` проходит. Зафиксированы решения: `choice` end-to-end через `content.task_options`, публичный банк без `choice`; практика и повторение без жёсткого таймера; интервалы обновляются один раз на тему за сессию; `FR-GRADE-09` перенесён на этап 7. Следующий шаг — реализовать этап 5. |
+| 2026-11-28 | Этап 5 реализован: задачи 60/60, миграция `000011_learning_practice`, реестр `grading`, `choice` end-to-end, практика и работа над ошибками, интервальное повторение, экраны `/app/practice` и `/app/review`. `templ generate`, `go build ./...`, `go test ./...` (включая интеграционные), `golangci-lint run ./...`, сборка SPA и миграции `up → down 1 → up` — зелёные. Change заархивирован как `2026-11-28-stage-5-practice-autocheck`; delta-спеки `grading`, `content`, `learning` синхронизированы в `openspec/specs`. Следующий шаг — этап 6. |

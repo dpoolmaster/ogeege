@@ -60,6 +60,38 @@ type DiagnosticStartData struct {
 	ActiveSessionID uuid.UUID
 }
 
+// PracticeInput содержит параметры запуска практики.
+type PracticeInput struct {
+	TopicID     *uuid.UUID
+	KimNumberID *uuid.UUID
+	PlanItemID  *uuid.UUID
+	TargetCount int
+}
+
+// PracticeChoice — вариант выбора на экране старта практики.
+type PracticeChoice struct {
+	Value string
+	Label string
+}
+
+// PracticeStartData описывает экран старта практики.
+type PracticeStartData struct {
+	Available       bool
+	Reason          string
+	Choices         []PracticeChoice
+	Selected        string
+	HasActive       bool
+	ActiveSessionID uuid.UUID
+}
+
+// ReviewStartData описывает экран работы над ошибками.
+type ReviewStartData struct {
+	Available       bool
+	Reason          string
+	HasActive       bool
+	ActiveSessionID uuid.UUID
+}
+
 // SessionItemView объединяет элемент сессии, снимок и ответ.
 type SessionItemView struct {
 	Item     SessionItem
@@ -228,12 +260,20 @@ type SessionResponse struct {
 
 // SessionItemResponse — элемент сессии в JSON-ответе.
 type SessionItemResponse struct {
+	ID        uuid.UUID               `json:"id"`
+	Position  int                     `json:"position"`
+	Status    string                  `json:"status"`
+	Statement string                  `json:"statement_md"`
+	Answer    *string                 `json:"answer,omitempty"`
+	IsCorrect *bool                   `json:"is_correct,omitempty"`
+	Options   []SessionOptionResponse `json:"options,omitempty"`
+}
+
+// SessionOptionResponse — вариант ответа в JSON-сессии без признака правильности.
+type SessionOptionResponse struct {
 	ID        uuid.UUID `json:"id"`
 	Position  int       `json:"position"`
-	Status    string    `json:"status"`
-	Statement string    `json:"statement_md"`
-	Answer    *string   `json:"answer,omitempty"`
-	IsCorrect *bool     `json:"is_correct,omitempty"`
+	ContentMD string    `json:"content_md"`
 }
 
 // ResultResponse — результат сессии в JSON-ответе.

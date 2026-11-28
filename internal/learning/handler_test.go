@@ -30,6 +30,12 @@ type fakeService struct {
 	prepareErr     error
 	startSession   *Session
 	startErr       error
+	practiceData   PracticeStartData
+	practiceErr    error
+	reviewData     ReviewStartData
+	reviewErr      error
+	sessionKind    string
+	sessionKindErr error
 	sessionView    SessionView
 	sessionErr     error
 	answerResult   AnswerResult
@@ -65,6 +71,26 @@ func (f *fakeService) PrepareDiagnostic(context.Context, uuid.UUID, string) (Dia
 
 func (f *fakeService) StartDiagnostic(context.Context, uuid.UUID, string) (*Session, error) {
 	return f.startSession, f.startErr
+}
+
+func (f *fakeService) PracticeStartData(context.Context, uuid.UUID) (PracticeStartData, error) {
+	return f.practiceData, f.practiceErr
+}
+
+func (f *fakeService) StartPractice(context.Context, uuid.UUID, PracticeInput) (*Session, error) {
+	return f.startSession, f.startErr
+}
+
+func (f *fakeService) ReviewStartData(context.Context, uuid.UUID) (ReviewStartData, error) {
+	return f.reviewData, f.reviewErr
+}
+
+func (f *fakeService) StartReview(context.Context, uuid.UUID) (*Session, error) {
+	return f.startSession, f.startErr
+}
+
+func (f *fakeService) SessionKind(context.Context, uuid.UUID, uuid.UUID) (string, error) {
+	return f.sessionKind, f.sessionKindErr
 }
 
 func (f *fakeService) SessionView(context.Context, uuid.UUID, uuid.UUID) (SessionView, error) {
@@ -344,5 +370,102 @@ func TestShowPlanRendersWeeks(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "Неделя с 16.11.2026") {
 		t.Fatal("страница плана не содержит неделю")
+	}
+}
+
+func TestShowPracticeRendersForm(t *testing.T) {
+	handler := newTestHandler(&fakeService{practiceData: PracticeStartData{
+		Available: true,
+		Choices:   []PracticeChoice{{Value: "topic:" + uuid.New().String(), Label: "Тема: Алгебра"}},
+	}})
+	context, recorder := testContext(http.MethodGet, "/app/practice", nil)
+	withUser(context)
+
+	handler.ShowPractice(context)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("статус = %d", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "Начать практику") {
+		t.Fatal("экран должен содержать кнопку старта практики")
+	}
+}
+
+func TestShowPracticeSessionRejectsOtherKind(t *testing.T) {
+	handler := newTestHandler(&fakeService{sessionView: SessionView{
+		Session: Session{ID: uuid.New(), Kind: SessionKindDiagnostic},
+	}})
+	context, recorder := testContext(http.MethodGet, "/app/practice/"+uuid.New().String(), nil)
+	withUser(context)
+	context.Params = gin.Params{{Key: "id", Value: uuid.New().String()}}
+
+	handler.ShowPracticeSession(context)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("статус = %d, ожидался 404", recorder.Code)
+	}
+}
+
+func TestSubmitStartPracticeRedirects(t *testing.T) {
+	sessionID := uuid.New()
+	handler := newTestHandler(&fakeService{startSession: &Session{ID: sessionID, Kind: SessionKindPractice}})
+	body := strings.NewReader("choice=topic:" + uuid.New().String())
+	context, recorder := testContext(http.MethodPost, "/app/practice", body)
+	withUser(context)
+
+	handler.SubmitStartPractice(context)
+	context.Writer.WriteHeaderNow()
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("статус = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	if recorder.Header().Get("Location") != "/app/practice/"+sessionID.String() {
+		t.Fatalf("редирект = %q", recorder.Header().Get("Location"))
+	}
+}
+
+func TestSubmitStartReviewEmptyState(t *testing.T) {
+	handler := newTestHandler(&fakeService{
+		startErr:   ErrNoReviewTasks,
+		reviewData: ReviewStartData{Available: true},
+	})
+	context, recorder := testContext(http.MethodPost, "/app/review", strings.NewReader(""))
+	withUser(context)
+
+	handler.SubmitStartReview(context)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("статус = %d", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "Нет заданий для повторения") {
+		t.Fatal("должно отображаться пустое состояние")
+	}
+}
+
+func TestAPICreateSessionUnsupportedKind(t *testing.T) {
+	handler := newTestHandler(&fakeService{})
+	context, recorder := testContext(http.MethodPost, "/api/sessions", strings.NewReader(`{"kind":"mock"}`))
+	withUser(context)
+
+	handler.APICreateSession(context)
+
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("статус = %d", recorder.Code)
+	}
+}
+
+func TestSubmitStartPracticeNoContentShowsReason(t *testing.T) {
+	handler := newTestHandler(&fakeService{startErr: ErrContentUnavailable})
+	body := strings.NewReader("choice=topic:" + uuid.New().String())
+	context, recorder := testContext(http.MethodPost, "/app/practice", body)
+	withUser(context)
+
+	handler.SubmitStartPractice(context)
+
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("статус = %d, ожидался 422", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "нет опубликованных заданий") {
+		t.Fatal("должно отображаться объяснение причины")
 	}
 }

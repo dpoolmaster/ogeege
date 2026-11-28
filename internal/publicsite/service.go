@@ -312,7 +312,7 @@ func (s *Service) landingTask(ctx context.Context, examID uuid.UUID, kimNumbers 
 			continue
 		}
 		kind, err := answerKind(task.AnswerSpec)
-		if err != nil || !grading.Supports(kind) {
+		if err != nil || !grading.SupportsPublic(kind) {
 			continue
 		}
 		if _, ok := numbers[task.KimNumberID]; !ok {
@@ -515,7 +515,7 @@ func (s *Service) CheckTask(ctx context.Context, taskID uuid.UUID, answer string
 	if err != nil {
 		return nil, ErrUnsupported
 	}
-	if !grading.Supports(kind) {
+	if !grading.SupportsPublic(kind) {
 		return nil, ErrUnsupported
 	}
 
@@ -630,7 +630,7 @@ func (s *Service) CheckDemo(ctx context.Context, payload *DemoPayload, answers m
 		}
 
 		kind, err := answerKind(task.AnswerSpec)
-		if err != nil || !grading.Supports(kind) {
+		if err != nil || !grading.SupportsPublic(kind) {
 			return nil, ErrInvalidSession
 		}
 
@@ -999,7 +999,7 @@ func (s *Service) publicTask(ctx context.Context, taskID uuid.UUID) (*content.Ta
 		return nil, ErrNotFound
 	}
 	kind, err := answerKind(task.AnswerSpec)
-	if err != nil || !grading.Supports(kind) {
+	if err != nil || !grading.SupportsPublic(kind) {
 		return nil, ErrUnsupported
 	}
 
@@ -1053,15 +1053,7 @@ func mergeSEO(base SEOMetadata, page *SEOPage) SEOMetadata {
 }
 
 func supportedKinds() []string {
-	kinds := []string{"number", "text", "digits", "interval"}
-	supported := make([]string, 0, len(kinds))
-	for _, kind := range kinds {
-		if grading.Supports(kind) {
-			supported = append(supported, kind)
-		}
-	}
-
-	return supported
+	return grading.PublicKinds()
 }
 
 func answerKind(spec json.RawMessage) (string, error) {

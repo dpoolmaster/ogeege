@@ -235,7 +235,55 @@ func ensureTasks(ctx context.Context, service *content.Service, code string, exa
 		published = append(published, *task)
 	}
 
+	if len(kimNumbers) > 0 {
+		choice, err := ensureChoiceTask(ctx, service, examYearID, kimNumbers[0], topicID)
+		if err != nil {
+			return nil, err
+		}
+		published = append(published, *choice)
+	}
+
 	return published, nil
+}
+
+func ensureChoiceTask(ctx context.Context, service *content.Service, examYearID uuid.UUID, kim content.KimNumber, topicID uuid.UUID) (*content.Task, error) {
+	const (
+		statement = "Демонстрационное задание с выбором ответа. Выберите верное равенство."
+		optionA   = "01930000-0000-7000-8000-000000000001"
+		optionB   = "01930000-0000-7000-8000-000000000002"
+		optionC   = "01930000-0000-7000-8000-000000000003"
+	)
+
+	hash := content.ContentHash(statement)
+	task, err := service.GetTaskByHash(ctx, hash)
+	if errors.Is(err, content.ErrNotFound) {
+		task, err = service.CreateTask(ctx, content.TaskInput{
+			ExamYearID: examYearID, KimNumberID: kim.ID, TopicID: &topicID,
+			Difficulty: content.DifficultyEasy, StatementMD: statement,
+			AnswerSpec:    json.RawMessage(`{"kind":"choice","option_ids":["` + optionA + `"]}`),
+			AnswerDisplay: "1 + 1 = 2",
+			Source:        "seed", SourceRef: "https://fipi.ru",
+			Options: []content.TaskOptionInput{
+				{ID: uuid.MustParse(optionA), Position: 1, ContentMD: "1 + 1 = 2", IsCorrect: true},
+				{ID: uuid.MustParse(optionB), Position: 2, ContentMD: "1 + 1 = 3"},
+				{ID: uuid.MustParse(optionC), Position: 3, ContentMD: "1 + 1 = 4"},
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("создать задание с выбором ответа: %w", err)
+		}
+	} else if err != nil {
+		return nil, err
+	}
+
+	if task.Status != content.StatusPublished {
+		task, err = service.PublishTask(ctx, task.ID)
+		if err != nil {
+			return nil, fmt.Errorf("опубликовать задание с выбором ответа: %w", err)
+		}
+	}
+
+	return task, nil
 }
 
 func answerSpec(answerType content.AnswerType) json.RawMessage {

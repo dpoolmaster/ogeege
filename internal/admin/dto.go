@@ -54,27 +54,36 @@ type theoryRequest struct {
 }
 
 type taskRequest struct {
-	ExamYearID    string          `json:"exam_year_id" form:"exam_year_id"`
-	KimNumberID   string          `json:"kim_number_id" form:"kim_number_id"`
-	TopicID       *string         `json:"topic_id" form:"topic_id"`
-	Difficulty    string          `json:"difficulty" form:"difficulty"`
-	StatementMD   string          `json:"statement_md" form:"statement_md"`
-	AnswerSpec    json.RawMessage `json:"answer_spec"`
-	AnswerDisplay string          `json:"answer_display" form:"answer_display"`
-	Source        string          `json:"source" form:"source"`
-	SourceRef     string          `json:"source_ref" form:"source_ref"`
+	ExamYearID    string              `json:"exam_year_id" form:"exam_year_id"`
+	KimNumberID   string              `json:"kim_number_id" form:"kim_number_id"`
+	TopicID       *string             `json:"topic_id" form:"topic_id"`
+	Difficulty    string              `json:"difficulty" form:"difficulty"`
+	StatementMD   string              `json:"statement_md" form:"statement_md"`
+	AnswerSpec    json.RawMessage     `json:"answer_spec"`
+	AnswerDisplay string              `json:"answer_display" form:"answer_display"`
+	Source        string              `json:"source" form:"source"`
+	SourceRef     string              `json:"source_ref" form:"source_ref"`
+	Options       []taskOptionRequest `json:"options"`
+}
+
+type taskOptionRequest struct {
+	ID        string `json:"id"`
+	Position  int    `json:"position"`
+	ContentMD string `json:"content_md"`
+	IsCorrect bool   `json:"is_correct"`
 }
 
 type importItemRequest struct {
-	ExamYearID    string          `json:"exam_year_id"`
-	KimNumberID   string          `json:"kim_number_id"`
-	TopicID       *string         `json:"topic_id"`
-	Difficulty    string          `json:"difficulty"`
-	StatementMD   string          `json:"statement_md"`
-	AnswerSpec    json.RawMessage `json:"answer_spec"`
-	AnswerDisplay string          `json:"answer_display"`
-	Source        string          `json:"source"`
-	SourceRef     string          `json:"source_ref"`
+	ExamYearID    string              `json:"exam_year_id"`
+	KimNumberID   string              `json:"kim_number_id"`
+	TopicID       *string             `json:"topic_id"`
+	Difficulty    string              `json:"difficulty"`
+	StatementMD   string              `json:"statement_md"`
+	AnswerSpec    json.RawMessage     `json:"answer_spec"`
+	AnswerDisplay string              `json:"answer_display"`
+	Source        string              `json:"source"`
+	SourceRef     string              `json:"source_ref"`
+	Options       []taskOptionRequest `json:"options"`
 }
 
 type importRequest struct {
@@ -195,21 +204,29 @@ type theoryResponse struct {
 }
 
 type taskResponse struct {
-	ID            uuid.UUID       `json:"id"`
-	ExamYearID    uuid.UUID       `json:"exam_year_id"`
-	KimNumberID   uuid.UUID       `json:"kim_number_id"`
-	TopicID       *uuid.UUID      `json:"topic_id"`
-	Difficulty    string          `json:"difficulty"`
-	StatementMD   string          `json:"statement_md"`
-	AnswerSpec    json.RawMessage `json:"answer_spec"`
-	AnswerDisplay string          `json:"answer_display"`
-	Source        string          `json:"source"`
-	SourceRef     string          `json:"source_ref"`
-	Status        string          `json:"status"`
-	IsPublic      bool            `json:"is_public"`
-	Version       int             `json:"version"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
+	ID            uuid.UUID            `json:"id"`
+	ExamYearID    uuid.UUID            `json:"exam_year_id"`
+	KimNumberID   uuid.UUID            `json:"kim_number_id"`
+	TopicID       *uuid.UUID           `json:"topic_id"`
+	Difficulty    string               `json:"difficulty"`
+	StatementMD   string               `json:"statement_md"`
+	AnswerSpec    json.RawMessage      `json:"answer_spec"`
+	AnswerDisplay string               `json:"answer_display"`
+	Source        string               `json:"source"`
+	SourceRef     string               `json:"source_ref"`
+	Status        string               `json:"status"`
+	IsPublic      bool                 `json:"is_public"`
+	Version       int                  `json:"version"`
+	CreatedAt     time.Time            `json:"created_at"`
+	UpdatedAt     time.Time            `json:"updated_at"`
+	Options       []taskOptionResponse `json:"options"`
+}
+
+type taskOptionResponse struct {
+	ID        uuid.UUID `json:"id"`
+	Position  int       `json:"position"`
+	ContentMD string    `json:"content_md"`
+	IsCorrect bool      `json:"is_correct"`
 }
 
 type taskVersionResponse struct {
@@ -408,13 +425,21 @@ func toTheoryResponses(versions []content.Theory) []theoryResponse {
 }
 
 func toTaskResponse(task *content.Task) taskResponse {
-	return taskResponse{
+	response := taskResponse{
 		ID: task.ID, ExamYearID: task.ExamYearID, KimNumberID: task.KimNumberID, TopicID: task.TopicID,
 		Difficulty: string(task.Difficulty), StatementMD: task.StatementMD, AnswerSpec: task.AnswerSpec,
 		AnswerDisplay: task.AnswerDisplay, Source: task.Source, SourceRef: task.SourceRef,
 		Status: string(task.Status), IsPublic: task.IsPublic, Version: task.Version,
 		CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
+		Options: make([]taskOptionResponse, 0, len(task.Options)),
 	}
+	for _, option := range task.Options {
+		response.Options = append(response.Options, taskOptionResponse{
+			ID: option.ID, Position: option.Position, ContentMD: option.ContentMD, IsCorrect: option.IsCorrect,
+		})
+	}
+
+	return response
 }
 
 func toTaskResponses(tasks []content.Task) []taskResponse {

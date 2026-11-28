@@ -198,6 +198,16 @@ type Task struct {
 	CreatedBy     *uuid.UUID
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	Options       []TaskOption
+}
+
+// TaskOption — вариант ответа задания.
+type TaskOption struct {
+	ID        uuid.UUID
+	TaskID    uuid.UUID
+	Position  int
+	ContentMD string
+	IsCorrect bool
 }
 
 // TaskVersion — сохранённая версия задания.
@@ -342,6 +352,15 @@ type TaskInput struct {
 	Source        string
 	SourceRef     string
 	CreatedBy     *uuid.UUID
+	Options       []TaskOptionInput
+}
+
+// TaskOptionInput содержит данные варианта ответа.
+type TaskOptionInput struct {
+	ID        uuid.UUID
+	Position  int
+	ContentMD string
+	IsCorrect bool
 }
 
 // TaskAttachmentInput содержит данные изображения задания.
@@ -417,6 +436,7 @@ type ImportItem struct {
 	Source        string
 	SourceRef     string
 	CreatedBy     *uuid.UUID
+	Options       []TaskOptionInput
 }
 
 // ImportCreated описывает созданное задание.

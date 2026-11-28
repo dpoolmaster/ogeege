@@ -62,8 +62,14 @@ const (
 	KindReview     ItemKind = "review"
 )
 
-// SessionKindDiagnostic — поддерживаемый на этапе вид сессии.
-const SessionKindDiagnostic = "diagnostic"
+const (
+	// SessionKindDiagnostic — диагностическая сессия.
+	SessionKindDiagnostic = "diagnostic"
+	// SessionKindPractice — сессия тематической практики.
+	SessionKindPractice = "practice"
+	// SessionKindReview — сессия работы над ошибками.
+	SessionKindReview = "review"
+)
 
 // Plan — версия учебного плана.
 type Plan struct {
@@ -113,6 +119,7 @@ type Session struct {
 	DeadlineAt   *time.Time
 	FinishedAt   *time.Time
 	ScorePrimary *float64
+	PlanItemID   *uuid.UUID
 	CreatedAt    time.Time
 }
 
@@ -185,6 +192,14 @@ type TaskSnapshot struct {
 	TopicID       *uuid.UUID           `json:"topic_id,omitempty"`
 	MaxPoints     float64              `json:"max_points"`
 	Attachments   []AttachmentSnapshot `json:"attachments"`
+	Options       []OptionSnapshot     `json:"options,omitempty"`
+}
+
+// OptionSnapshot — вариант ответа в снимке задания.
+type OptionSnapshot struct {
+	ID        uuid.UUID `json:"id"`
+	Position  int       `json:"position"`
+	ContentMD string    `json:"content_md"`
 }
 
 // AttachmentSnapshot — вложение задания в снимке.
@@ -209,6 +224,8 @@ var (
 	ErrInsufficientContent  = errors.New("недостаточно опубликованных заданий для диагностики")
 	ErrSessionCompleted     = errors.New("сессия уже завершена")
 	ErrUnsupportedKind      = errors.New("вид сессии пока не поддерживается")
+	ErrContentUnavailable   = errors.New("нет доступных заданий для сессии")
+	ErrNoReviewTasks        = errors.New("нет заданий для повторения")
 	ErrNoPlan               = errors.New("учебный план не найден")
 	ErrInvalidSessionKind   = errors.New("поддерживается только диагностическая сессия")
 	ErrResultNotReady       = errors.New("результат ещё не готов")

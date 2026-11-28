@@ -50,6 +50,8 @@ templ TodayPage(brand string, data TodayData) {
 					GoalMax:     data.GoalMax,
 				})
 				<nav class="v-actions" aria-label="Разделы подготовки">
+					@ui.Button(ui.ButtonProps{Label: "Практика", Href: "/app/practice", Variant: ui.ButtonPrimary})
+					@ui.Button(ui.ButtonProps{Label: "Работа над ошибками", Href: "/app/review", Variant: ui.ButtonSecondary})
 					@ui.Button(ui.ButtonProps{Label: "Диагностика", Href: "/app/diagnostics", Variant: ui.ButtonSecondary})
 					@ui.Button(ui.ButtonProps{Label: "Карта пробелов", Href: "/app/gaps", Variant: ui.ButtonSecondary})
 					@ui.Button(ui.ButtonProps{Label: "План", Href: "/app/plan", Variant: ui.ButtonSecondary})
@@ -156,20 +158,101 @@ templ DiagnosticsPage(brand string, data DiagnosticStartData, csrf string) {
 	}
 }
 
-templ SessionPage(brand string, view SessionView, csrf string) {
-	@CabinetLayout(brand, "Диагностика") {
+templ PracticePage(brand string, data PracticeStartData, csrf string) {
+	@CabinetLayout(brand, "Практика") {
 		@ui.AppShell(ui.AppShellProps{
 			Brand:     brand,
-			PageTitle: "Диагностика",
-			Nav:       cabinetNav("diagnostics"),
+			PageTitle: "Практика",
+			Nav:       cabinetNav("practice"),
+		}) {
+			if data.HasActive {
+				@ui.Card(ui.CardProps{Title: "Незавершённая практика", Meta: "Можно продолжить"}) {
+					<p>У вас есть незавершённая практика. Ответы сохранены.</p>
+					@ui.Button(ui.ButtonProps{Label: "Продолжить", Href: "/app/practice/" + data.ActiveSessionID.String(), Variant: ui.ButtonPrimary})
+				}
+			} else if !data.Available {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title:       "Практика недоступна",
+					Text:        data.Reason,
+					ActionLabel: "Открыть план",
+					ActionHref:  "/app/plan",
+					Error:       true,
+				})
+			} else if len(data.Choices) == 0 {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title:       "Нет тем для практики",
+					Text:        "В треке пока нет опубликованных тем и номеров КИМ.",
+					ActionLabel: "Открыть план",
+					ActionHref:  "/app/plan",
+				})
+			} else {
+				@ui.Card(ui.CardProps{Title: "Тематическая практика", Meta: "10 заданий или все доступные"}) {
+					<p>Выберите тему, номер КИМ или пункт недельного плана. Задания проверяются сразу после ответа.</p>
+					<form method="post" action="/app/practice" class="v-form">
+						<input type="hidden" name="csrf_token" value={ csrf }/>
+						<div class="v-field">
+							<label for="field-practice-choice">Что тренировать</label>
+							<select id="field-practice-choice" name="choice" required>
+								<option value="">Выберите направление</option>
+								for _, choice := range data.Choices {
+									<option value={ choice.Value } selected?={ data.Selected == choice.Value }>{ choice.Label }</option>
+								}
+							</select>
+						</div>
+						@ui.Button(ui.ButtonProps{Label: "Начать практику", Type: "submit", Variant: ui.ButtonPrimary})
+					</form>
+				}
+			}
+		}
+	}
+}
+
+templ ReviewPage(brand string, data ReviewStartData, csrf string) {
+	@CabinetLayout(brand, "Работа над ошибками") {
+		@ui.AppShell(ui.AppShellProps{
+			Brand:     brand,
+			PageTitle: "Работа над ошибками",
+			Nav:       cabinetNav("review"),
+		}) {
+			if data.HasActive {
+				@ui.Card(ui.CardProps{Title: "Незавершённое повторение", Meta: "Можно продолжить"}) {
+					<p>У вас есть незавершённая работа над ошибками. Ответы сохранены.</p>
+					@ui.Button(ui.ButtonProps{Label: "Продолжить", Href: "/app/review/" + data.ActiveSessionID.String(), Variant: ui.ButtonPrimary})
+				}
+			} else if !data.Available {
+				@ui.EmptyState(ui.EmptyStateProps{
+					Title:       "Нет заданий для повторения",
+					Text:        data.Reason,
+					ActionLabel: "Перейти к практике",
+					ActionHref:  "/app/practice",
+				})
+			} else {
+				@ui.Card(ui.CardProps{Title: "Повторение ошибок", Meta: "До 10 заданий"}) {
+					<p>В повторение попадают ранее неверно решённые задания и темы с наступившим сроком повторения.</p>
+					<form method="post" action="/app/review" class="v-form">
+						<input type="hidden" name="csrf_token" value={ csrf }/>
+						@ui.Button(ui.ButtonProps{Label: "Начать повторение", Type: "submit", Variant: ui.ButtonPrimary})
+					</form>
+				}
+			}
+		}
+	}
+}
+
+templ SessionPage(brand string, view SessionView, csrf string) {
+	@CabinetLayout(brand, sessionTitle(view.Session.Kind)) {
+		@ui.AppShell(ui.AppShellProps{
+			Brand:     brand,
+			PageTitle: sessionTitle(view.Session.Kind),
+			Nav:       cabinetNav(sessionNav(view.Session.Kind)),
 		}) {
 			if len(view.Items) == 0 {
-				@ui.EmptyState(ui.EmptyStateProps{Title: "Заданий нет", Text: "В диагностике нет заданий.", ActionLabel: "К диагностике", ActionHref: "/app/diagnostics"})
+				@ui.EmptyState(ui.EmptyStateProps{Title: "Заданий нет", Text: "В сессии нет заданий.", ActionLabel: "К разделу", ActionHref: sessionPath(view.Session.Kind)})
 			} else {
 				@ui.Progress(ui.ProgressProps{Value: view.CurrentIndex + 1, Max: len(view.Items), Label: "Задание"})
 				if view.CurrentIndex >= 0 && view.CurrentIndex < len(view.Items) {
 					{{ item := view.Items[view.CurrentIndex] }}
-					@ui.Card(ui.CardProps{Title: "Задание " + strconv.Itoa(item.Item.Position), Meta: "Задание диагностики"}) {
+					@ui.Card(ui.CardProps{Title: "Задание " + strconv.Itoa(item.Item.Position), Meta: sessionItemMeta(view.Session.Kind)}) {
 						<p class="v-task__statement">{ item.Snapshot.StatementMD }</p>
 						for _, attachment := range item.Snapshot.Attachments {
 							<img src={ attachment.URL } alt={ attachment.Alt } class="v-task__image"/>
@@ -181,29 +264,46 @@ templ SessionPage(brand string, view SessionView, csrf string) {
 								Text:    "Ваш ответ: " + item.Answer.RawAnswer,
 							})
 						}
-						<form method="post" action={ "/app/diagnostics/" + view.Session.ID.String() + "/items/" + item.Item.ID.String() } class="v-form">
+						<form method="post" action={ sessionPath(view.Session.Kind) + "/" + view.Session.ID.String() + "/items/" + item.Item.ID.String() } class="v-form">
 							<input type="hidden" name="csrf_token" value={ csrf }/>
-							@ui.Field(ui.FieldProps{
-								Label:    "Ответ",
-								Name:     "answer",
-								Value:    answerText(item.Answer),
-								Required: true,
-							})
+							if len(item.Snapshot.Options) > 0 {
+								<fieldset class="v-field">
+									<legend>Выберите ответ</legend>
+									for _, option := range item.Snapshot.Options {
+										<label class="v-choice">
+											<input
+												type={ choiceInputType(item.Snapshot.AnswerSpec) }
+												name="answer"
+												value={ option.ID.String() }
+												checked?={ answerHasOption(item.Answer, option.ID) }
+											/>
+											<span>{ option.ContentMD }</span>
+										</label>
+									}
+								</fieldset>
+							} else {
+								@ui.Field(ui.FieldProps{
+									Label:    "Ответ",
+									Name:     "answer",
+									Value:    answerText(item.Answer),
+									Required: true,
+								})
+							}
 							@ui.Button(ui.ButtonProps{Label: "Сохранить ответ", Type: "submit", Variant: ui.ButtonPrimary})
 						</form>
 						<nav class="v-actions" aria-label="Навигация по заданиям">
 							if view.CurrentIndex > 0 {
-								@ui.Button(ui.ButtonProps{Label: "Предыдущее", Href: "/app/diagnostics/" + view.Session.ID.String() + "?item=" + view.Items[view.CurrentIndex-1].Item.ID.String(), Variant: ui.ButtonSecondary})
+								@ui.Button(ui.ButtonProps{Label: "Предыдущее", Href: sessionPath(view.Session.Kind) + "/" + view.Session.ID.String() + "?item=" + view.Items[view.CurrentIndex-1].Item.ID.String(), Variant: ui.ButtonSecondary})
 							}
 							if view.CurrentIndex+1 < len(view.Items) {
-								@ui.Button(ui.ButtonProps{Label: "Следующее", Href: "/app/diagnostics/" + view.Session.ID.String() + "?item=" + view.Items[view.CurrentIndex+1].Item.ID.String(), Variant: ui.ButtonSecondary})
+								@ui.Button(ui.ButtonProps{Label: "Следующее", Href: sessionPath(view.Session.Kind) + "/" + view.Session.ID.String() + "?item=" + view.Items[view.CurrentIndex+1].Item.ID.String(), Variant: ui.ButtonSecondary})
 							}
 						</nav>
 					}
 				}
-				<form method="post" action={ "/app/diagnostics/" + view.Session.ID.String() + "/submit" } class="v-form">
+				<form method="post" action={ sessionPath(view.Session.Kind) + "/" + view.Session.ID.String() + "/submit" } class="v-form">
 					<input type="hidden" name="csrf_token" value={ csrf }/>
-					@ui.Button(ui.ButtonProps{Label: "Завершить диагностику", Type: "submit", Variant: ui.ButtonDanger})
+					@ui.Button(ui.ButtonProps{Label: sessionFinishLabel(view.Session.Kind), Type: "submit", Variant: ui.ButtonDanger})
 				</form>
 			}
 		}
@@ -211,11 +311,11 @@ templ SessionPage(brand string, view SessionView, csrf string) {
 }
 
 templ ResultPage(brand string, view ResultView) {
-	@CabinetLayout(brand, "Результат диагностики") {
+	@CabinetLayout(brand, sessionResultTitle(view.Session.Kind)) {
 		@ui.AppShell(ui.AppShellProps{
 			Brand:     brand,
-			PageTitle: "Результат диагностики",
-			Nav:       cabinetNav("diagnostics"),
+			PageTitle: sessionResultTitle(view.Session.Kind),
+			Nav:       cabinetNav(sessionNav(view.Session.Kind)),
 		}) {
 			@ui.Card(ui.CardProps{Title: "Итог", Meta: "Первичные баллы"}) {
 				<p class="v-score">{ scoreText(view.Result.PrimaryScore) } из { scoreText(view.Result.MaxScore) }</p>
@@ -224,13 +324,13 @@ templ ResultPage(brand string, view ResultView) {
 			@ui.Card(ui.CardProps{Title: "Разбивка по заданиям", Meta: "Темы и номера КИМ"}) {
 				@ui.Table(ui.TableProps{
 					Head:    []string{"№", "КИМ", "Тема", "Результат", "Баллы", "Причина"},
-					Caption: "Разбивка результата диагностики",
+					Caption: "Разбивка результата сессии",
 					Rows:    resultRows(view),
 				})
 			}
 			@ui.Card(ui.CardProps{Title: "Темы для повторения", Meta: "Приоритеты"}) {
 				if len(view.Topics) == 0 {
-					@ui.EmptyState(ui.EmptyStateProps{Title: "Темы не определены", Text: "В диагностике не было тем."})
+					@ui.EmptyState(ui.EmptyStateProps{Title: "Темы не определены", Text: "В сессии не было тем."})
 				} else {
 					<ul>
 						for _, topic := range view.Topics {
@@ -240,8 +340,16 @@ templ ResultPage(brand string, view ResultView) {
 				}
 			}
 			<nav class="v-actions" aria-label="Дальнейшие действия">
-				@ui.Button(ui.ButtonProps{Label: "Карта пробелов", Href: "/app/gaps", Variant: ui.ButtonPrimary})
-				@ui.Button(ui.ButtonProps{Label: "План подготовки", Href: "/app/plan", Variant: ui.ButtonSecondary})
+				if view.Session.Kind == SessionKindReview {
+					@ui.Button(ui.ButtonProps{Label: "Ещё повторение", Href: "/app/review", Variant: ui.ButtonPrimary})
+					@ui.Button(ui.ButtonProps{Label: "Практика", Href: "/app/practice", Variant: ui.ButtonSecondary})
+				} else if view.Session.Kind == SessionKindPractice {
+					@ui.Button(ui.ButtonProps{Label: "Ещё практика", Href: "/app/practice", Variant: ui.ButtonPrimary})
+					@ui.Button(ui.ButtonProps{Label: "Работа над ошибками", Href: "/app/review", Variant: ui.ButtonSecondary})
+				} else {
+					@ui.Button(ui.ButtonProps{Label: "Карта пробелов", Href: "/app/gaps", Variant: ui.ButtonPrimary})
+					@ui.Button(ui.ButtonProps{Label: "План подготовки", Href: "/app/plan", Variant: ui.ButtonSecondary})
+				}
 			</nav>
 		}
 	}
@@ -335,6 +443,12 @@ templ PlanPage(brand string, view PlanView, csrf string) {
 									if item.Done {
 										@ui.Badge(ui.ToneOK, statusLabel(item.Item.Status))
 									} else {
+										if item.Item.Kind == KindPractice {
+											@ui.Button(ui.ButtonProps{Label: "Практика", Href: "/app/practice?plan=" + item.Item.ID.String(), Variant: ui.ButtonSecondary, Size: ui.ButtonSmall})
+										}
+										if item.Item.Kind == KindReview {
+											@ui.Button(ui.ButtonProps{Label: "Повторить", Href: "/app/review", Variant: ui.ButtonSecondary, Size: ui.ButtonSmall})
+										}
 										<form method="post" action={ "/app/plan/items/" + item.Item.ID.String() + "/complete" }>
 											<input type="hidden" name="csrf_token" value={ csrf }/>
 											@ui.Button(ui.ButtonProps{Label: "Отметить", Type: "submit", Variant: ui.ButtonSecondary, Size: ui.ButtonSmall})

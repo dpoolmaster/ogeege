@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,7 +26,7 @@ const dateLayout = "2006-01-02"
 
 const (
 	defaultIntervalDays = 1
-	defaultEase         = 2.5
+	defaultEase         = 2.0
 	replanInterval      = 7 * 24 * time.Hour
 	contentPageLimit    = 200
 )
@@ -47,6 +49,23 @@ type ContentProvider interface {
 	ListPublicTasks(ctx context.Context, filter content.TaskFilter) ([]content.Task, error)
 	GetTask(ctx context.Context, id uuid.UUID) (*content.Task, error)
 	ListTaskAttachments(ctx context.Context, taskID uuid.UUID) ([]content.TaskAttachment, error)
+	ListTaskOptions(ctx context.Context, taskID uuid.UUID) ([]content.TaskOption, error)
+}
+
+// Shuffler перемешивает задания; подменяется в тестах.
+type Shuffler interface {
+	Shuffle(n int, swap func(i, j int))
+}
+
+type lockedShuffler struct {
+	mu sync.Mutex
+	r  *rand.Rand
+}
+
+func (s *lockedShuffler) Shuffle(n int, swap func(i, j int)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.r.Shuffle(n, swap)
 }
 
 // TxManager выполняет функцию в транзакции.
@@ -56,25 +75,31 @@ type TxManager interface {
 
 // Service содержит сценарии модуля learning.
 type Service struct {
-	repo    Repository
-	db      db.Querier
-	tx      TxManager
-	clock   clock.Clock
-	goals   GoalProvider
-	content ContentProvider
-	logger  *slog.Logger
+	repo     Repository
+	db       db.Querier
+	tx       TxManager
+	clock    clock.Clock
+	goals    GoalProvider
+	content  ContentProvider
+	shuffler Shuffler
+	logger   *slog.Logger
 }
 
 // NewService создаёт сервис learning.
-func NewService(repo Repository, database db.Querier, tx TxManager, clk clock.Clock, goals GoalProvider, contentProvider ContentProvider, logger *slog.Logger) *Service {
+func NewService(repo Repository, database db.Querier, tx TxManager, clk clock.Clock, goals GoalProvider, contentProvider ContentProvider, shuffler Shuffler, logger *slog.Logger) *Service {
+	if shuffler == nil {
+		shuffler = &lockedShuffler{r: rand.New(rand.NewSource(time.Now().UnixNano()))}
+	}
+
 	return &Service{
-		repo:    repo,
-		db:      database,
-		tx:      tx,
-		clock:   clk,
-		goals:   goals,
-		content: contentProvider,
-		logger:  logger,
+		repo:     repo,
+		db:       database,
+		tx:       tx,
+		clock:    clk,
+		goals:    goals,
+		content:  contentProvider,
+		shuffler: shuffler,
+		logger:   logger,
 	}
 }
 
@@ -296,7 +321,7 @@ func (s *Service) PrepareDiagnostic(ctx context.Context, userID uuid.UUID, examC
 		return DiagnosticStartData{}, err
 	}
 
-	active, err := s.repo.GetInProgressSession(ctx, s.db, userID, exam.ID)
+	active, err := s.repo.GetInProgressSession(ctx, s.db, userID, exam.ID, SessionKindDiagnostic)
 	if err == nil {
 		return DiagnosticStartData{Available: true, HasActive: true, ActiveSessionID: active.ID}, nil
 	}
@@ -329,7 +354,7 @@ func (s *Service) StartDiagnostic(ctx context.Context, userID uuid.UUID, examCod
 		return nil, err
 	}
 
-	active, err := s.repo.GetInProgressSession(ctx, s.db, userID, exam.ID)
+	active, err := s.repo.GetInProgressSession(ctx, s.db, userID, exam.ID, SessionKindDiagnostic)
 	if err == nil {
 		return active, nil
 	}
@@ -372,7 +397,11 @@ func (s *Service) StartDiagnostic(ctx context.Context, userID uuid.UUID, examCod
 		if err != nil {
 			return nil, err
 		}
-		snapshot := buildTaskSnapshot(task, kim, attachments)
+		options, err := s.content.ListTaskOptions(ctx, task.ID)
+		if err != nil {
+			return nil, err
+		}
+		snapshot := buildTaskSnapshot(task, kim, attachments, options)
 		raw, err := json.Marshal(snapshot)
 		if err != nil {
 			return nil, fmt.Errorf("собрать снимок задания: %w", err)
@@ -459,6 +488,16 @@ func (s *Service) SessionView(ctx context.Context, userID, sessionID uuid.UUID) 
 	return view, nil
 }
 
+// SessionKind возвращает вид сессии владельца.
+func (s *Service) SessionKind(ctx context.Context, userID, sessionID uuid.UUID) (string, error) {
+	session, err := s.repo.GetSessionByUser(ctx, s.db, sessionID, userID)
+	if err != nil {
+		return "", err
+	}
+
+	return session.Kind, nil
+}
+
 // SaveAnswer проверяет и сохраняет ответ ученика.
 func (s *Service) SaveAnswer(ctx context.Context, userID, sessionID, itemID uuid.UUID, raw string) (AnswerResult, error) {
 	session, err := s.repo.GetSessionByUser(ctx, s.db, sessionID, userID)
@@ -513,7 +552,7 @@ func (s *Service) SaveAnswer(ctx context.Context, userID, sessionID, itemID uuid
 		Reason:     reasonLabel(checked.Correct),
 		Normalized: checked.NormalizedAnswer,
 		Expected:   checked.Expected,
-		NextHref:   s.nextItemHref(ctx, sessionID, item.Position),
+		NextHref:   s.nextItemHref(ctx, sessionID, session.Kind, item.Position),
 	}
 
 	return result, nil
@@ -550,46 +589,48 @@ func (s *Service) CompleteSession(ctx context.Context, userID, sessionID uuid.UU
 	now := s.clock.Now()
 	result, payload, touchedTopics, touchedKims := buildResult(sessionID, items, answerByItem)
 
-	structure, err := s.loadStructure(ctx, session.ExamID)
-	if err != nil {
-		return nil, err
-	}
 	topicMastery, kimMastery, err := s.loadMastery(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	applyMastery(userID, topicMastery, kimMastery, items, answerByItem, now)
-	priorities := BuildPriorities(structure.Topics, ComputeTopicWeights(structure.Topics, structure.Kims, structure.Links), topicMastery, now)
-
-	activePlan, err := s.repo.GetActivePlan(ctx, s.db, userID)
-	hasPlan := true
-	if errors.Is(err, ErrNotFound) {
-		hasPlan = false
-	} else if err != nil {
-		return nil, err
+	if session.Kind == SessionKindPractice || session.Kind == SessionKindReview {
+		applyIntervals(userID, topicMastery, items, answerByItem, now)
 	}
 
 	var (
-		oldWeeks  []Week
-		oldItems  []PlanItem
 		newPlan   *Plan
 		weeks     []Week
 		planItems []PlanItem
 	)
-	if hasPlan {
-		oldWeeks, oldItems, err = s.loadPlanTree(ctx, activePlan.ID)
+	if session.Kind == SessionKindDiagnostic {
+		structure, err := s.loadStructure(ctx, session.ExamID)
 		if err != nil {
 			return nil, err
 		}
-		newPlan, err = clonePlan(*activePlan, now)
-		if err != nil {
+		priorities := BuildPriorities(structure.Topics, ComputeTopicWeights(structure.Topics, structure.Kims, structure.Links), topicMastery, now)
+
+		activePlan, err := s.repo.GetActivePlan(ctx, s.db, userID)
+		hasPlan := true
+		if errors.Is(err, ErrNotFound) {
+			hasPlan = false
+		} else if err != nil {
 			return nil, err
 		}
-		diagnosticDone := true
-		blueprints := BuildWeekBlueprints(now, newPlan.ExamDate, newPlan.WeeklyMinutes, priorities, diagnosticDone)
-		weeks, planItems, err = s.materializePlan(*newPlan, oldWeeks, oldItems, blueprints)
-		if err != nil {
-			return nil, err
+		if hasPlan {
+			oldWeeks, oldItems, err := s.loadPlanTree(ctx, activePlan.ID)
+			if err != nil {
+				return nil, err
+			}
+			newPlan, err = clonePlan(*activePlan, now)
+			if err != nil {
+				return nil, err
+			}
+			blueprints := BuildWeekBlueprints(now, newPlan.ExamDate, newPlan.WeeklyMinutes, priorities, true)
+			weeks, planItems, err = s.materializePlan(*newPlan, oldWeeks, oldItems, blueprints)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -609,6 +650,11 @@ func (s *Service) CompleteSession(ctx context.Context, userID, sessionID uuid.UU
 		for _, kimID := range touchedKims {
 			record := kimMastery[kimID]
 			if err := s.repo.UpsertKimMastery(ctx, q, &record); err != nil {
+				return err
+			}
+		}
+		if session.PlanItemID != nil {
+			if err := s.repo.MarkItemDone(ctx, q, *session.PlanItemID, userID); err != nil && !errors.Is(err, ErrNotFound) {
 				return err
 			}
 		}
@@ -947,15 +993,7 @@ func (s *Service) listAllPublicTasks(ctx context.Context, examYearID uuid.UUID) 
 }
 
 func supportedKinds() []string {
-	candidates := []string{"number", "text", "digits", "interval"}
-	kinds := make([]string, 0, len(candidates))
-	for _, kind := range candidates {
-		if grading.Supports(kind) {
-			kinds = append(kinds, kind)
-		}
-	}
-
-	return kinds
+	return grading.CheckableKinds()
 }
 
 func (s *Service) loadStructure(ctx context.Context, examID uuid.UUID) (*examStructure, error) {
@@ -1104,18 +1142,30 @@ func (s *Service) materializePlan(plan Plan, oldWeeks []Week, oldItems []PlanIte
 	return weeks, items, nil
 }
 
-func (s *Service) nextItemHref(ctx context.Context, sessionID uuid.UUID, position int) string {
+func (s *Service) nextItemHref(ctx context.Context, sessionID uuid.UUID, kind string, position int) string {
+	base := sessionPath(kind)
 	items, err := s.repo.ListSessionItems(ctx, s.db, sessionID)
 	if err != nil {
-		return fmt.Sprintf("/app/diagnostics/%s", sessionID)
+		return fmt.Sprintf("%s/%s", base, sessionID)
 	}
 	for _, item := range items {
 		if item.Position > position && item.Status != SessionItemAnswered {
-			return fmt.Sprintf("/app/diagnostics/%s?item=%s", sessionID, item.ID)
+			return fmt.Sprintf("%s/%s?item=%s", base, sessionID, item.ID)
 		}
 	}
 
-	return fmt.Sprintf("/app/diagnostics/%s", sessionID)
+	return fmt.Sprintf("%s/%s", base, sessionID)
+}
+
+func sessionPath(kind string) string {
+	switch kind {
+	case SessionKindPractice:
+		return "/app/practice"
+	case SessionKindReview:
+		return "/app/review"
+	default:
+		return "/app/diagnostics"
+	}
 }
 
 func buildResult(sessionID uuid.UUID, items []SessionItem, answers map[uuid.UUID]Answer) (*SessionResult, json.RawMessage, []uuid.UUID, []uuid.UUID) {
@@ -1279,7 +1329,7 @@ func copyItem(item PlanItem, weekID uuid.UUID) (PlanItem, error) {
 	return copied, nil
 }
 
-func buildTaskSnapshot(task content.Task, kim content.KimNumber, attachments []content.TaskAttachment) TaskSnapshot {
+func buildTaskSnapshot(task content.Task, kim content.KimNumber, attachments []content.TaskAttachment, options []content.TaskOption) TaskSnapshot {
 	return TaskSnapshot{
 		TaskID:        task.ID,
 		Version:       task.Version,
@@ -1291,7 +1341,17 @@ func buildTaskSnapshot(task content.Task, kim content.KimNumber, attachments []c
 		TopicID:       task.TopicID,
 		MaxPoints:     float64(kim.MaxPrimaryScore),
 		Attachments:   attachmentSnapshots(attachments),
+		Options:       optionSnapshots(options),
 	}
+}
+
+func optionSnapshots(options []content.TaskOption) []OptionSnapshot {
+	result := make([]OptionSnapshot, 0, len(options))
+	for _, option := range options {
+		result = append(result, OptionSnapshot{ID: option.ID, Position: option.Position, ContentMD: option.ContentMD})
+	}
+
+	return result
 }
 
 func evaluateAnswer(snapshot TaskSnapshot, raw string) (grading.Result, float64, error) {
@@ -1375,11 +1435,13 @@ func nextStep(plan *Plan, weeks []Week, items []PlanItem) (string, string) {
 		case KindDiagnostic:
 			return "Пройдите диагностику, чтобы построить карту пробелов.", "/app/diagnostics"
 		case KindReview:
-			return "Повторите темы с наибольшим приоритетом.", "/app/plan"
+			return "Повторите темы с наибольшим приоритетом.", "/app/review"
+		case KindPractice:
+			return "Практика по темам из плана.", "/app/practice?plan=" + item.ID.String()
 		default:
 			phase := weekPhase[item.WeekID]
 			if phase == PhasePractice {
-				return "Практика по темам из плана.", "/app/plan"
+				return "Практика по темам из плана.", "/app/practice"
 			}
 
 			return "Изучите теорию и закрепите материал.", "/app/plan"

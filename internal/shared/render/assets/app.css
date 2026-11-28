@@ -1534,3 +1534,27 @@ table th {
 		transition-duration: 0.001ms !important;
 	}
 }
+
+.v-brand,
+.v-shell__brand,
+.v-skip-link {
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+}
+
+.v-choice {
+	display: flex;
+	align-items: center;
+	gap: var(--v-space-2);
+	min-height: 44px;
+	padding: var(--v-space-1) 0;
+	cursor: pointer;
+}
+
+.v-choice input {
+	width: 20px;
+	height: 20px;
+	margin: 0;
+	flex: none;
+}

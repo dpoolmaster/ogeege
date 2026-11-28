@@ -74,6 +74,8 @@ type Repository interface {
 	ListCandidateTasks(ctx context.Context, q db.Querier, examYearID, kimNumberID uuid.UUID, difficulty *Difficulty, topicID *uuid.UUID) ([]Task, error)
 	CreateTaskAttachment(ctx context.Context, q db.Querier, attachment *TaskAttachment) error
 	ListTaskAttachments(ctx context.Context, q db.Querier, taskID uuid.UUID) ([]TaskAttachment, error)
+	ListTaskOptions(ctx context.Context, q db.Querier, taskID uuid.UUID) ([]TaskOption, error)
+	ReplaceTaskOptions(ctx context.Context, q db.Querier, taskID uuid.UUID, options []TaskOption) error
 
 	CreateVariant(ctx context.Context, q db.Querier, variant *Variant) error
 	GetVariant(ctx context.Context, q db.Querier, id uuid.UUID) (*Variant, error)

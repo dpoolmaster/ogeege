@@ -107,7 +107,7 @@ func run() error {
 	csrf := httpserver.NewCSRF(cfg.App.SessionSecret, cfg.App.Env == "production", auth.SessionTokenFromRequest)
 	authHandler := auth.NewHandler(authService, csrf, profileService, logger, cfg.App.BrandName)
 	profileHandler := profile.NewHandler(profileService, logger)
-	learningService := learning.NewService(learning.NewPgRepository(), pool, txManager, clk, profileService, contentService, logger)
+	learningService := learning.NewService(learning.NewPgRepository(), pool, txManager, clk, profileService, contentService, nil, logger)
 	learningHandler := learning.NewHandler(learningService, csrf, logger, cfg.App.BrandName)
 
 	publicRepo := publicsite.NewPgRepository()

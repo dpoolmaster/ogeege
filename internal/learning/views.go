@@ -1,10 +1,13 @@
 package learning
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"oge-ege/internal/shared/render/ui"
 )
@@ -24,6 +27,8 @@ func cabinetNav(active string) []ui.NavGroup {
 		Items: []ui.NavItem{
 			{Label: "Сегодня", Href: "/app", Active: active == "today"},
 			{Label: "Диагностика", Href: "/app/diagnostics", Active: active == "diagnostics"},
+			{Label: "Практика", Href: "/app/practice", Active: active == "practice"},
+			{Label: "Повторение", Href: "/app/review", Active: active == "review"},
 			{Label: "Карта пробелов", Href: "/app/gaps", Active: active == "gaps"},
 			{Label: "План", Href: "/app/plan", Active: active == "plan"},
 			{Label: "Цель", Href: "/app/goal", Active: active == "goal"},
@@ -142,4 +147,78 @@ func resultRows(view ResultView) [][]string {
 	}
 
 	return rows
+}
+
+func sessionTitle(kind string) string {
+	switch kind {
+	case SessionKindPractice:
+		return "Практика"
+	case SessionKindReview:
+		return "Работа над ошибками"
+	default:
+		return "Диагностика"
+	}
+}
+
+func sessionResultTitle(kind string) string {
+	return "Результат: " + strings.ToLower(sessionTitle(kind))
+}
+
+func sessionItemMeta(kind string) string {
+	switch kind {
+	case SessionKindPractice:
+		return "Задание практики"
+	case SessionKindReview:
+		return "Задание повторения"
+	default:
+		return "Задание диагностики"
+	}
+}
+
+func sessionFinishLabel(kind string) string {
+	switch kind {
+	case SessionKindPractice:
+		return "Завершить практику"
+	case SessionKindReview:
+		return "Завершить повторение"
+	default:
+		return "Завершить диагностику"
+	}
+}
+
+func sessionNav(kind string) string {
+	switch kind {
+	case SessionKindPractice:
+		return "practice"
+	case SessionKindReview:
+		return "review"
+	default:
+		return "diagnostics"
+	}
+}
+
+func choiceInputType(spec json.RawMessage) string {
+	var payload struct {
+		OptionIDs []string `json:"option_ids"`
+	}
+	if err := json.Unmarshal(spec, &payload); err == nil && len(payload.OptionIDs) > 1 {
+		return "checkbox"
+	}
+
+	return "radio"
+}
+
+func answerHasOption(answer *Answer, optionID uuid.UUID) bool {
+	if answer == nil {
+		return false
+	}
+	for _, value := range strings.FieldsFunc(answer.RawAnswer, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '\n' || r == '\t'
+	}) {
+		if value == optionID.String() {
+			return true
+		}
+	}
+
+	return false
 }

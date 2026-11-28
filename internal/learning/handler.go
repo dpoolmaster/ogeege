@@ -24,6 +24,11 @@ type ServiceAPI interface {
 	SetupGoal(ctx context.Context, userID uuid.UUID, in GoalInput) (*Plan, error)
 	PrepareDiagnostic(ctx context.Context, userID uuid.UUID, examCode string) (DiagnosticStartData, error)
 	StartDiagnostic(ctx context.Context, userID uuid.UUID, examCode string) (*Session, error)
+	PracticeStartData(ctx context.Context, userID uuid.UUID) (PracticeStartData, error)
+	StartPractice(ctx context.Context, userID uuid.UUID, in PracticeInput) (*Session, error)
+	ReviewStartData(ctx context.Context, userID uuid.UUID) (ReviewStartData, error)
+	StartReview(ctx context.Context, userID uuid.UUID) (*Session, error)
+	SessionKind(ctx context.Context, userID, sessionID uuid.UUID) (string, error)
 	SessionView(ctx context.Context, userID, sessionID uuid.UUID) (SessionView, error)
 	SaveAnswer(ctx context.Context, userID, sessionID, itemID uuid.UUID, raw string) (AnswerResult, error)
 	CompleteSession(ctx context.Context, userID, sessionID uuid.UUID) (*SessionResult, error)
@@ -58,6 +63,18 @@ func (h *Handler) RegisterHTML(router gin.IRoutes) {
 	router.POST("/app/diagnostics/:id/items/:itemId", h.SubmitAnswer)
 	router.POST("/app/diagnostics/:id/submit", h.SubmitSession)
 	router.GET("/app/diagnostics/:id/result", h.ShowResult)
+	router.GET("/app/practice", h.ShowPractice)
+	router.POST("/app/practice", h.SubmitStartPractice)
+	router.GET("/app/practice/:id", h.ShowPracticeSession)
+	router.POST("/app/practice/:id/items/:itemId", h.SubmitPracticeAnswer)
+	router.POST("/app/practice/:id/submit", h.SubmitPracticeSession)
+	router.GET("/app/practice/:id/result", h.ShowPracticeResult)
+	router.GET("/app/review", h.ShowReview)
+	router.POST("/app/review", h.SubmitStartReview)
+	router.GET("/app/review/:id", h.ShowReviewSession)
+	router.POST("/app/review/:id/items/:itemId", h.SubmitReviewAnswer)
+	router.POST("/app/review/:id/submit", h.SubmitReviewSession)
+	router.GET("/app/review/:id/result", h.ShowReviewResult)
 	router.GET("/app/gaps", h.ShowGaps)
 	router.GET("/app/plan", h.ShowPlan)
 	router.POST("/app/plan/replan", h.SubmitReplan)
@@ -70,6 +87,7 @@ func (h *Handler) RegisterJSON(router gin.IRoutes) {
 	router.POST("/plan/replan", h.APIReplan)
 	router.PATCH("/plan/items/:id", h.APICompleteItem)
 	router.POST("/diagnostics", h.APIStartDiagnostic)
+	router.POST("/sessions", h.APICreateSession)
 	router.GET("/sessions/:id", h.APISession)
 	router.PATCH("/sessions/:id/items/:itemId", h.APIAnswer)
 	router.POST("/sessions/:id/submit", h.APISubmit)
@@ -514,6 +532,353 @@ func (h *Handler) APIResult(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"result": resultResponse(&view.Result)})
 }
 
+// ShowPractice обрабатывает GET /app/practice.
+func (h *Handler) ShowPractice(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		c.Redirect(http.StatusSeeOther, "/login")
+		return
+	}
+	data, err := h.service.PracticeStartData(c.Request.Context(), user.ID)
+	if errors.Is(err, ErrNoGoal) {
+		data = PracticeStartData{Available: false, Reason: "Задайте учебную цель, чтобы начать практику."}
+		err = nil
+	}
+	if err != nil {
+		h.renderPageError(c, err)
+		return
+	}
+	if plan := strings.TrimSpace(c.Query("plan")); plan != "" {
+		if _, err := uuid.Parse(plan); err == nil {
+			data.Selected = "plan:" + plan
+		}
+	}
+	h.render(c, http.StatusOK, PracticePage(h.brand, data, h.csrfToken(c)))
+}
+
+// SubmitStartPractice обрабатывает POST /app/practice.
+func (h *Handler) SubmitStartPractice(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		c.Redirect(http.StatusSeeOther, "/login")
+		return
+	}
+	input, err := parsePracticeChoice(c.PostForm("choice"))
+	if err != nil {
+		data, dataErr := h.service.PracticeStartData(c.Request.Context(), user.ID)
+		if dataErr != nil {
+			h.renderPageError(c, dataErr)
+			return
+		}
+		data.Selected = c.PostForm("choice")
+		h.render(c, http.StatusUnprocessableEntity, PracticePage(h.brand, data, h.csrfToken(c)))
+		return
+	}
+	session, err := h.service.StartPractice(c.Request.Context(), user.ID, input)
+	if err != nil {
+		h.renderPageError(c, err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/app/practice/"+session.ID.String())
+}
+
+// ShowPracticeSession обрабатывает GET /app/practice/:id.
+func (h *Handler) ShowPracticeSession(c *gin.Context) {
+	h.showSession(c, SessionKindPractice, "/app/practice")
+}
+
+// SubmitPracticeAnswer обрабатывает POST /app/practice/:id/items/:itemId.
+func (h *Handler) SubmitPracticeAnswer(c *gin.Context) {
+	h.submitAnswer(c, SessionKindPractice, "/app/practice")
+}
+
+// SubmitPracticeSession обрабатывает POST /app/practice/:id/submit.
+func (h *Handler) SubmitPracticeSession(c *gin.Context) {
+	h.submitSession(c, SessionKindPractice, "/app/practice")
+}
+
+// ShowPracticeResult обрабатывает GET /app/practice/:id/result.
+func (h *Handler) ShowPracticeResult(c *gin.Context) {
+	h.showResult(c, SessionKindPractice, "/app/practice")
+}
+
+// ShowReview обрабатывает GET /app/review.
+func (h *Handler) ShowReview(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		c.Redirect(http.StatusSeeOther, "/login")
+		return
+	}
+	data, err := h.service.ReviewStartData(c.Request.Context(), user.ID)
+	if err != nil {
+		h.renderPageError(c, err)
+		return
+	}
+	h.render(c, http.StatusOK, ReviewPage(h.brand, data, h.csrfToken(c)))
+}
+
+// SubmitStartReview обрабатывает POST /app/review.
+func (h *Handler) SubmitStartReview(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		c.Redirect(http.StatusSeeOther, "/login")
+		return
+	}
+	session, err := h.service.StartReview(c.Request.Context(), user.ID)
+	if errors.Is(err, ErrNoReviewTasks) {
+		data, dataErr := h.service.ReviewStartData(c.Request.Context(), user.ID)
+		if dataErr != nil {
+			h.renderPageError(c, dataErr)
+			return
+		}
+		data.Available = false
+		data.Reason = "Нет заданий для повторения. Перейдите к практике или диагностике."
+		h.render(c, http.StatusOK, ReviewPage(h.brand, data, h.csrfToken(c)))
+		return
+	}
+	if err != nil {
+		h.renderPageError(c, err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, "/app/review/"+session.ID.String())
+}
+
+// ShowReviewSession обрабатывает GET /app/review/:id.
+func (h *Handler) ShowReviewSession(c *gin.Context) {
+	h.showSession(c, SessionKindReview, "/app/review")
+}
+
+// SubmitReviewAnswer обрабатывает POST /app/review/:id/items/:itemId.
+func (h *Handler) SubmitReviewAnswer(c *gin.Context) {
+	h.submitAnswer(c, SessionKindReview, "/app/review")
+}
+
+// SubmitReviewSession обрабатывает POST /app/review/:id/submit.
+func (h *Handler) SubmitReviewSession(c *gin.Context) {
+	h.submitSession(c, SessionKindReview, "/app/review")
+}
+
+// ShowReviewResult обрабатывает GET /app/review/:id/result.
+func (h *Handler) ShowReviewResult(c *gin.Context) {
+	h.showResult(c, SessionKindReview, "/app/review")
+}
+
+func (h *Handler) showSession(c *gin.Context, kind, base string) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		c.Redirect(http.StatusSeeOther, "/login")
+		return
+	}
+	sessionID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		h.renderError(c, http.StatusNotFound, "Сессия не найдена")
+		return
+	}
+	view, err := h.service.SessionView(c.Request.Context(), user.ID, sessionID)
+	if err != nil {
+		h.renderPageError(c, err)
+		return
+	}
+	if view.Session.Kind != kind {
+		h.renderError(c, http.StatusNotFound, "Сессия не найдена")
+		return
+	}
+	if itemID := strings.TrimSpace(c.Query("item")); itemID != "" {
+		if parsed, err := uuid.Parse(itemID); err == nil {
+			for index, item := range view.Items {
+				if item.Item.ID == parsed {
+					view.CurrentIndex = index
+					break
+				}
+			}
+		}
+	}
+	if view.Completed {
+		c.Redirect(http.StatusSeeOther, base+"/"+sessionID.String()+"/result")
+		return
+	}
+	h.render(c, http.StatusOK, SessionPage(h.brand, view, h.csrfToken(c)))
+}
+
+func (h *Handler) submitAnswer(c *gin.Context, kind, base string) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		c.Redirect(http.StatusSeeOther, "/login")
+		return
+	}
+	sessionID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		h.renderError(c, http.StatusNotFound, "Сессия не найдена")
+		return
+	}
+	itemID, err := uuid.Parse(c.Param("itemId"))
+	if err != nil {
+		h.renderError(c, http.StatusNotFound, "Задание не найдено")
+		return
+	}
+	if !h.requireKind(c, user.ID, sessionID, kind) {
+		return
+	}
+	answer := strings.Join(c.PostFormArray("answer"), ",")
+	result, err := h.service.SaveAnswer(c.Request.Context(), user.ID, sessionID, itemID, answer)
+	if err != nil {
+		h.renderPageError(c, err)
+		return
+	}
+	if result.NextHref == "" {
+		result.NextHref = base + "/" + sessionID.String()
+	}
+	c.Redirect(http.StatusSeeOther, result.NextHref)
+}
+
+func (h *Handler) submitSession(c *gin.Context, kind, base string) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		c.Redirect(http.StatusSeeOther, "/login")
+		return
+	}
+	sessionID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		h.renderError(c, http.StatusNotFound, "Сессия не найдена")
+		return
+	}
+	if !h.requireKind(c, user.ID, sessionID, kind) {
+		return
+	}
+	if _, err := h.service.CompleteSession(c.Request.Context(), user.ID, sessionID); err != nil {
+		h.renderPageError(c, err)
+		return
+	}
+	c.Redirect(http.StatusSeeOther, base+"/"+sessionID.String()+"/result")
+}
+
+func (h *Handler) showResult(c *gin.Context, kind, base string) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		c.Redirect(http.StatusSeeOther, "/login")
+		return
+	}
+	sessionID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		h.renderError(c, http.StatusNotFound, "Сессия не найдена")
+		return
+	}
+	view, err := h.service.Result(c.Request.Context(), user.ID, sessionID)
+	if errors.Is(err, ErrResultNotReady) {
+		c.Redirect(http.StatusSeeOther, base+"/"+sessionID.String())
+		return
+	}
+	if err != nil {
+		h.renderPageError(c, err)
+		return
+	}
+	if view.Session.Kind != kind {
+		h.renderError(c, http.StatusNotFound, "Сессия не найдена")
+		return
+	}
+	h.render(c, http.StatusOK, ResultPage(h.brand, *view))
+}
+
+func (h *Handler) requireKind(c *gin.Context, userID, sessionID uuid.UUID, kind string) bool {
+	actual, err := h.service.SessionKind(c.Request.Context(), userID, sessionID)
+	if err != nil {
+		h.renderPageError(c, err)
+		return false
+	}
+	if actual != kind {
+		h.renderError(c, http.StatusNotFound, "Сессия не найдена")
+		return false
+	}
+
+	return true
+}
+
+func parsePracticeChoice(value string) (PracticeInput, error) {
+	value = strings.TrimSpace(value)
+	prefix, raw, found := strings.Cut(value, ":")
+	if !found {
+		return PracticeInput{}, invalid("choice", "выберите тему, номер КИМ или пункт плана")
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return PracticeInput{}, invalid("choice", "некорректный идентификатор")
+	}
+
+	switch prefix {
+	case "topic":
+		return PracticeInput{TopicID: &id}, nil
+	case "kim":
+		return PracticeInput{KimNumberID: &id}, nil
+	case "plan":
+		return PracticeInput{PlanItemID: &id}, nil
+	default:
+		return PracticeInput{}, invalid("choice", "выберите тему, номер КИМ или пункт плана")
+	}
+}
+
+// APICreateSession обрабатывает POST /api/sessions.
+func (h *Handler) APICreateSession(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		httpserver.AbortWithError(c, http.StatusUnauthorized, "unauthorized", "Требуется вход в систему")
+		return
+	}
+	var req struct {
+		Kind        string  `json:"kind"`
+		TopicID     *string `json:"topic_id"`
+		KimNumberID *string `json:"kim_number_id"`
+		PlanItemID  *string `json:"plan_item_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpserver.AbortWithError(c, http.StatusUnprocessableEntity, "validation_failed", "Проверьте тело запроса")
+		return
+	}
+
+	var (
+		session *Session
+		err     error
+	)
+	switch strings.TrimSpace(req.Kind) {
+	case SessionKindPractice:
+		input := PracticeInput{}
+		if input.TopicID, err = parseOptionalUUID(req.TopicID); err != nil {
+			httpserver.AbortWithError(c, http.StatusUnprocessableEntity, "validation_failed", "Некорректный topic_id")
+			return
+		}
+		if input.KimNumberID, err = parseOptionalUUID(req.KimNumberID); err != nil {
+			httpserver.AbortWithError(c, http.StatusUnprocessableEntity, "validation_failed", "Некорректный kim_number_id")
+			return
+		}
+		if input.PlanItemID, err = parseOptionalUUID(req.PlanItemID); err != nil {
+			httpserver.AbortWithError(c, http.StatusUnprocessableEntity, "validation_failed", "Некорректный plan_item_id")
+			return
+		}
+		session, err = h.service.StartPractice(c.Request.Context(), user.ID, input)
+	case SessionKindReview:
+		session, err = h.service.StartReview(c.Request.Context(), user.ID)
+	default:
+		httpserver.AbortWithError(c, http.StatusUnprocessableEntity, "unsupported_kind", "Поддерживаются виды practice и review")
+		return
+	}
+	if err != nil {
+		h.apiError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"session": gin.H{"id": session.ID, "kind": session.Kind, "status": session.Status}})
+}
+
+func parseOptionalUUID(value *string) (*uuid.UUID, error) {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return nil, nil
+	}
+	parsed, err := uuid.Parse(strings.TrimSpace(*value))
+	if err != nil {
+		return nil, err
+	}
+
+	return &parsed, nil
+}
+
 func (h *Handler) apiError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
@@ -531,6 +896,10 @@ func (h *Handler) apiError(c *gin.Context, err error) {
 		httpserver.AbortWithError(c, http.StatusUnprocessableEntity, "exam_unavailable", "Трек не найден или не опубликован")
 	case errors.Is(err, ErrInsufficientContent):
 		httpserver.AbortWithError(c, http.StatusUnprocessableEntity, "insufficient_content", "Недостаточно опубликованных заданий для диагностики")
+	case errors.Is(err, ErrContentUnavailable):
+		httpserver.AbortWithError(c, http.StatusUnprocessableEntity, "insufficient_content", "Для выбранного направления нет опубликованных заданий")
+	case errors.Is(err, ErrNoReviewTasks):
+		httpserver.AbortWithError(c, http.StatusUnprocessableEntity, "no_review_tasks", "Нет заданий для повторения")
 	case errors.Is(err, ErrSessionCompleted):
 		httpserver.AbortWithError(c, http.StatusConflict, "session_completed", "Сессия уже завершена")
 	case errors.Is(err, ErrResultNotReady):
@@ -569,6 +938,16 @@ func (h *Handler) renderPageError(c *gin.Context, err error) {
 		h.render(c, http.StatusUnprocessableEntity, DiagnosticsPage(h.brand, DiagnosticStartData{
 			Available: false,
 			Reason:    "Недостаточно опубликованных заданий, чтобы покрыть все номера КИМ.",
+		}, h.csrfToken(c)))
+	case errors.Is(err, ErrContentUnavailable):
+		h.render(c, http.StatusUnprocessableEntity, PracticePage(h.brand, PracticeStartData{
+			Available: false,
+			Reason:    "Для выбранной темы или номера КИМ нет опубликованных заданий с автоматической проверкой. Выберите другое направление.",
+		}, h.csrfToken(c)))
+	case errors.Is(err, ErrNoReviewTasks):
+		h.render(c, http.StatusOK, ReviewPage(h.brand, ReviewStartData{
+			Available: false,
+			Reason:    "Нет заданий для повторения. Перейдите к практике или диагностике.",
 		}, h.csrfToken(c)))
 	case errors.Is(err, ErrExamUnavailable):
 		h.renderError(c, http.StatusUnprocessableEntity, "Трек не найден или не опубликован")
@@ -677,6 +1056,10 @@ func sessionResponse(view SessionView) SessionResponse {
 			Position:  item.Item.Position,
 			Status:    string(item.Item.Status),
 			Statement: item.Snapshot.StatementMD,
+			Options:   make([]SessionOptionResponse, 0, len(item.Snapshot.Options)),
+		}
+		for _, option := range item.Snapshot.Options {
+			entry.Options = append(entry.Options, SessionOptionResponse(option))
 		}
 		if item.Answer != nil {
 			answer := item.Answer.RawAnswer

@@ -45,7 +45,19 @@ func (s *Service) CreateTask(ctx context.Context, in TaskInput) (*Task, error) {
 		UpdatedAt:     now,
 	}
 
-	if err := s.repo.CreateTask(ctx, s.db, task); err != nil {
+	options, err := buildTaskOptions(task.ID, in.Options)
+	if err != nil {
+		return nil, err
+	}
+	task.Options = options
+
+	if err := s.tx.WithTx(ctx, func(q db.Querier) error {
+		if err := s.repo.CreateTask(ctx, q, task); err != nil {
+			return err
+		}
+
+		return s.repo.ReplaceTaskOptions(ctx, q, task.ID, options)
+	}); err != nil {
 		return nil, err
 	}
 
@@ -74,6 +86,11 @@ func (s *Service) UpdateTask(ctx context.Context, id uuid.UUID, in TaskInput) (*
 	updated.SourceRef = strings.TrimSpace(in.SourceRef)
 	updated.ContentHash = ContentHash(in.StatementMD)
 	updated.UpdatedAt = now
+	options, err := buildTaskOptions(task.ID, in.Options)
+	if err != nil {
+		return nil, err
+	}
+	updated.Options = options
 
 	if task.Status == StatusPublished {
 		versionID, err := ids.New()
@@ -101,7 +118,11 @@ func (s *Service) UpdateTask(ctx context.Context, id uuid.UUID, in TaskInput) (*
 				return err
 			}
 
-			return s.repo.UpdateTask(ctx, q, &updated)
+			if err := s.repo.UpdateTask(ctx, q, &updated); err != nil {
+				return err
+			}
+
+			return s.repo.ReplaceTaskOptions(ctx, q, task.ID, options)
 		})
 		if err != nil {
 			return nil, err
@@ -110,7 +131,13 @@ func (s *Service) UpdateTask(ctx context.Context, id uuid.UUID, in TaskInput) (*
 		return &updated, nil
 	}
 
-	if err := s.repo.UpdateTask(ctx, s.db, &updated); err != nil {
+	if err := s.tx.WithTx(ctx, func(q db.Querier) error {
+		if err := s.repo.UpdateTask(ctx, q, &updated); err != nil {
+			return err
+		}
+
+		return s.repo.ReplaceTaskOptions(ctx, q, task.ID, options)
+	}); err != nil {
 		return nil, err
 	}
 
@@ -119,7 +146,17 @@ func (s *Service) UpdateTask(ctx context.Context, id uuid.UUID, in TaskInput) (*
 
 // GetTask возвращает задание.
 func (s *Service) GetTask(ctx context.Context, id uuid.UUID) (*Task, error) {
-	return s.repo.GetTask(ctx, s.db, id)
+	task, err := s.repo.GetTask(ctx, s.db, id)
+	if err != nil {
+		return nil, err
+	}
+	options, err := s.repo.ListTaskOptions(ctx, s.db, id)
+	if err != nil {
+		return nil, err
+	}
+	task.Options = options
+
+	return task, nil
 }
 
 // GetTaskByHash возвращает задание по хешу условия.
@@ -129,7 +166,19 @@ func (s *Service) GetTaskByHash(ctx context.Context, hash []byte) (*Task, error)
 
 // ListTasks возвращает страницу заданий.
 func (s *Service) ListTasks(ctx context.Context, filter TaskFilter) ([]Task, error) {
-	return s.repo.ListTasks(ctx, s.db, filter)
+	tasks, err := s.repo.ListTasks(ctx, s.db, filter)
+	if err != nil {
+		return nil, err
+	}
+	for index := range tasks {
+		options, err := s.repo.ListTaskOptions(ctx, s.db, tasks[index].ID)
+		if err != nil {
+			return nil, err
+		}
+		tasks[index].Options = options
+	}
+
+	return tasks, nil
 }
 
 // ListPublicTasks возвращает опубликованные публичные задания.
@@ -150,7 +199,7 @@ func (s *Service) ListDemoTasks(ctx context.Context, examYearID uuid.UUID, limit
 
 	tasks, err := s.repo.ListPublicTasks(ctx, s.db, TaskFilter{
 		ExamYearID:           &examYearID,
-		Kinds:                supportedGradingKinds(),
+		Kinds:                grading.PublicKinds(),
 		ExcludePublishedMock: true,
 		Limit:                200,
 	})
@@ -182,24 +231,17 @@ func (s *Service) ListDemoTasks(ctx context.Context, examYearID uuid.UUID, limit
 	return result, nil
 }
 
-func supportedGradingKinds() []string {
-	kinds := []string{"number", "text", "digits", "interval"}
-	supported := make([]string, 0, len(kinds))
-	for _, kind := range kinds {
-		if grading.Supports(kind) {
-			supported = append(supported, kind)
-		}
-	}
-
-	return supported
-}
-
 // PublishTask публикует задание после проверки.
 func (s *Service) PublishTask(ctx context.Context, id uuid.UUID) (*Task, error) {
 	task, err := s.repo.GetTask(ctx, s.db, id)
 	if err != nil {
 		return nil, err
 	}
+	options, err := s.repo.ListTaskOptions(ctx, s.db, id)
+	if err != nil {
+		return nil, err
+	}
+	task.Options = options
 	in := TaskInput{
 		ExamYearID:    task.ExamYearID,
 		KimNumberID:   task.KimNumberID,
@@ -211,6 +253,7 @@ func (s *Service) PublishTask(ctx context.Context, id uuid.UUID) (*Task, error) 
 		Source:        task.Source,
 		SourceRef:     task.SourceRef,
 		CreatedBy:     task.CreatedBy,
+		Options:       taskOptionsInput(task.Options),
 	}
 	if err := s.validateTask(ctx, in, true); err != nil {
 		return nil, err
@@ -327,6 +370,9 @@ func (s *Service) validateTask(ctx context.Context, in TaskInput, forPublish boo
 	if err := validateAnswerSpec(in.AnswerSpec); err != nil {
 		return err
 	}
+	if err := validateTaskOptions(in.AnswerSpec, in.Options); err != nil {
+		return err
+	}
 	if err := validateLaTeX(in.StatementMD); err != nil {
 		return err
 	}
@@ -356,4 +402,9 @@ func (s *Service) validateTask(ctx context.Context, in TaskInput, forPublish boo
 	}
 
 	return nil
+}
+
+// ListTaskOptions возвращает варианты ответа задания.
+func (s *Service) ListTaskOptions(ctx context.Context, taskID uuid.UUID) ([]TaskOption, error) {
+	return s.repo.ListTaskOptions(ctx, s.db, taskID)
 }

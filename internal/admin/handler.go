@@ -815,11 +815,15 @@ func (h *Handler) importTasks(c *gin.Context) {
 			}
 			topicID = &parsed
 		}
+		options, ok := h.taskOptions(c, item.Options, true)
+		if !ok {
+			return
+		}
 		items = append(items, content.ImportItem{
 			ExamYearID: examYearID, KimNumberID: kimNumberID, TopicID: topicID,
 			Difficulty: content.Difficulty(item.Difficulty), StatementMD: item.StatementMD,
 			AnswerSpec: item.AnswerSpec, AnswerDisplay: item.AnswerDisplay,
-			Source: item.Source, SourceRef: item.SourceRef,
+			Source: item.Source, SourceRef: item.SourceRef, Options: options,
 		})
 	}
 	actor, ok := h.actor(c)
@@ -1335,12 +1339,40 @@ func (h *Handler) taskInput(c *gin.Context, req taskRequest) (content.TaskInput,
 		topicID = &parsed
 	}
 
+	options, ok := h.taskOptions(c, req.Options, false)
+	if !ok {
+		return content.TaskInput{}, false
+	}
+
 	return content.TaskInput{
 		ExamYearID: examYearID, KimNumberID: kimNumberID, TopicID: topicID,
 		Difficulty: content.Difficulty(req.Difficulty), StatementMD: req.StatementMD,
 		AnswerSpec: req.AnswerSpec, AnswerDisplay: req.AnswerDisplay,
-		Source: req.Source, SourceRef: req.SourceRef,
+		Source: req.Source, SourceRef: req.SourceRef, Options: options,
 	}, true
+}
+
+func (h *Handler) taskOptions(c *gin.Context, req []taskOptionRequest, requireIDs bool) ([]content.TaskOptionInput, bool) {
+	options := make([]content.TaskOptionInput, 0, len(req))
+	for _, item := range req {
+		var id uuid.UUID
+		if strings.TrimSpace(item.ID) != "" {
+			parsed, err := uuid.Parse(strings.TrimSpace(item.ID))
+			if err != nil {
+				httpserver.AbortWithFields(c, http.StatusUnprocessableEntity, "validation_failed", "Проверьте заполнение полей", map[string]string{"options": "некорректный идентификатор варианта"})
+				return nil, false
+			}
+			id = parsed
+		} else if requireIDs {
+			httpserver.AbortWithFields(c, http.StatusUnprocessableEntity, "validation_failed", "Проверьте заполнение полей", map[string]string{"options": "для импорта нужны идентификаторы вариантов"})
+			return nil, false
+		}
+		options = append(options, content.TaskOptionInput{
+			ID: id, Position: item.Position, ContentMD: item.ContentMD, IsCorrect: item.IsCorrect,
+		})
+	}
+
+	return options, true
 }
 
 func (h *Handler) variantInput(c *gin.Context, req variantRequest) (content.VariantInput, bool) {

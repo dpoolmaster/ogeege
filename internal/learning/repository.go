@@ -31,7 +31,10 @@ type Repository interface {
 	CreateSessionItems(ctx context.Context, q db.Querier, items []SessionItem) error
 	GetSession(ctx context.Context, q db.Querier, id uuid.UUID) (*Session, error)
 	GetSessionByUser(ctx context.Context, q db.Querier, id, userID uuid.UUID) (*Session, error)
-	GetInProgressSession(ctx context.Context, q db.Querier, userID, examID uuid.UUID) (*Session, error)
+	GetInProgressSession(ctx context.Context, q db.Querier, userID, examID uuid.UUID, kind string) (*Session, error)
+	GetPlanItemForUser(ctx context.Context, q db.Querier, itemID, userID uuid.UUID) (*PlanItem, uuid.UUID, error)
+	ListDueTopicIDs(ctx context.Context, q db.Querier, userID uuid.UUID, now time.Time) ([]uuid.UUID, error)
+	ListIncorrectTaskIDs(ctx context.Context, q db.Querier, userID uuid.UUID) ([]uuid.UUID, error)
 	ListSessionItems(ctx context.Context, q db.Querier, sessionID uuid.UUID) ([]SessionItem, error)
 	GetSessionItem(ctx context.Context, q db.Querier, sessionID, itemID uuid.UUID) (*SessionItem, error)
 	ListAnswers(ctx context.Context, q db.Querier, sessionID uuid.UUID) ([]Answer, error)
@@ -140,14 +143,15 @@ const sessionColumns = `
     deadline_at,
     finished_at,
     score_primary::float8,
+    plan_item_id,
     created_at
 `
 
 const createSessionQuery = `
 INSERT INTO learning.sessions (
     id, user_id, exam_id, kind, variant_id, status, started_at, deadline_at, finished_at,
-    score_primary, created_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    score_primary, plan_item_id, created_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 `
 
 const getSessionQuery = `
@@ -165,9 +169,34 @@ WHERE id = $1 AND user_id = $2
 const getInProgressSessionQuery = `
 SELECT ` + sessionColumns + `
 FROM learning.sessions
-WHERE user_id = $1 AND exam_id = $2 AND status = 'in_progress'
+WHERE user_id = $1 AND exam_id = $2 AND kind = $3 AND status = 'in_progress'
 ORDER BY created_at DESC
 LIMIT 1
+`
+
+const getPlanItemForUserQuery = `
+SELECT pi.id, pi.week_id, pi.day_of_week, pi.kind, pi.topic_id, pi.kim_number_id, pi.task_count, pi.status,
+       sp.exam_id
+FROM learning.plan_items pi
+JOIN learning.plan_weeks pw ON pw.id = pi.week_id
+JOIN learning.study_plans sp ON sp.id = pw.plan_id
+WHERE pi.id = $1 AND sp.user_id = $2 AND sp.status = 'active'
+`
+
+const listDueTopicIDsQuery = `
+SELECT topic_id
+FROM learning.topic_mastery
+WHERE user_id = $1 AND next_review_at IS NOT NULL AND next_review_at <= $2
+ORDER BY next_review_at
+`
+
+const listIncorrectTaskIDsQuery = `
+SELECT DISTINCT si.task_id
+FROM learning.answers a
+JOIN learning.session_items si ON si.id = a.session_item_id
+JOIN learning.sessions s ON s.id = si.session_id
+WHERE s.user_id = $1 AND a.is_correct = false
+ORDER BY si.task_id
 `
 
 const createSessionItemQuery = `
@@ -423,7 +452,7 @@ func (r *PgRepository) CreateSession(ctx context.Context, q db.Querier, session 
 	if _, err := q.Exec(ctx, createSessionQuery,
 		session.ID, session.UserID, session.ExamID, session.Kind, session.VariantID,
 		string(session.Status), session.StartedAt, session.DeadlineAt, session.FinishedAt,
-		session.ScorePrimary, session.CreatedAt,
+		session.ScorePrimary, session.PlanItemID, session.CreatedAt,
 	); err != nil {
 		return wrapWriteError("создать сессию", err)
 	}
@@ -456,8 +485,74 @@ func (r *PgRepository) GetSessionByUser(ctx context.Context, q db.Querier, id, u
 }
 
 // GetInProgressSession возвращает незавершённую сессию ученика.
-func (r *PgRepository) GetInProgressSession(ctx context.Context, q db.Querier, userID, examID uuid.UUID) (*Session, error) {
-	return scanSession(q.QueryRow(ctx, getInProgressSessionQuery, userID, examID))
+func (r *PgRepository) GetInProgressSession(ctx context.Context, q db.Querier, userID, examID uuid.UUID, kind string) (*Session, error) {
+	return scanSession(q.QueryRow(ctx, getInProgressSessionQuery, userID, examID, kind))
+}
+
+// GetPlanItemForUser возвращает пункт плана владельца и идентификатор трека.
+func (r *PgRepository) GetPlanItemForUser(ctx context.Context, q db.Querier, itemID, userID uuid.UUID) (*PlanItem, uuid.UUID, error) {
+	var (
+		item   PlanItem
+		examID uuid.UUID
+	)
+	err := q.QueryRow(ctx, getPlanItemForUserQuery, itemID, userID).Scan(
+		&item.ID, &item.WeekID, &item.DayOfWeek, &item.Kind, &item.TopicID,
+		&item.KimNumberID, &item.TaskCount, &item.Status, &examID,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, uuid.Nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, uuid.Nil, fmt.Errorf("прочитать пункт плана: %w", err)
+	}
+
+	return &item, examID, nil
+}
+
+// ListDueTopicIDs возвращает темы с наступившим сроком повторения.
+func (r *PgRepository) ListDueTopicIDs(ctx context.Context, q db.Querier, userID uuid.UUID, now time.Time) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx, listDueTopicIDsQuery, userID, now)
+	if err != nil {
+		return nil, fmt.Errorf("выбрать темы для повторения: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("прочитать тему для повторения: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("прочитать темы для повторения: %w", err)
+	}
+
+	return ids, nil
+}
+
+// ListIncorrectTaskIDs возвращает ранее неверно решённые задания ученика.
+func (r *PgRepository) ListIncorrectTaskIDs(ctx context.Context, q db.Querier, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.Query(ctx, listIncorrectTaskIDsQuery, userID)
+	if err != nil {
+		return nil, fmt.Errorf("выбрать неверно решённые задания: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("прочитать неверно решённое задание: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("прочитать неверно решённые задания: %w", err)
+	}
+
+	return ids, nil
 }
 
 // ListSessionItems возвращает задания сессии.
@@ -708,7 +803,7 @@ func scanSession(row rowScanner) (*Session, error) {
 	err := row.Scan(
 		&session.ID, &session.UserID, &session.ExamID, &session.Kind, &session.VariantID,
 		&session.Status, &session.StartedAt, &session.DeadlineAt, &session.FinishedAt,
-		&session.ScorePrimary, &session.CreatedAt,
+		&session.ScorePrimary, &session.PlanItemID, &session.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound

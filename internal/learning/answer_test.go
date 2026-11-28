@@ -2,6 +2,7 @@ package learning
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -26,7 +27,7 @@ func TestBuildTaskSnapshot(t *testing.T) {
 	}
 	attachments := []content.TaskAttachment{{Kind: "image", URL: "/media/a.png", Alt: "Рисунок"}}
 
-	snapshot := buildTaskSnapshot(task, kim, attachments)
+	snapshot := buildTaskSnapshot(task, kim, attachments, nil)
 	if snapshot.TaskID != taskID || snapshot.Version != 3 || snapshot.StatementMD != "Условие" {
 		t.Fatalf("снимок задания = %+v", snapshot)
 	}
@@ -48,7 +49,7 @@ func TestEvaluateAnswer(t *testing.T) {
 	}{
 		{name: "верный", spec: `{"kind":"number","accepted":["4"]}`, answer: "4", wantReason: grading.ReasonMatched, wantPoints: 1},
 		{name: "неверный", spec: `{"kind":"number","accepted":["4"]}`, answer: "5", wantReason: grading.ReasonMismatch, wantPoints: 0},
-		{name: "неподдерживаемый", spec: `{"kind":"choice"}`, answer: "1", wantReason: grading.ReasonUnsupported, wantPoints: 0},
+		{name: "неподдерживаемый", spec: `{"kind":"extended"}`, answer: "1", wantReason: grading.ReasonNeedsReview, wantPoints: 0},
 	}
 
 	for _, tt := range tests {
@@ -65,5 +66,68 @@ func TestEvaluateAnswer(t *testing.T) {
 				t.Fatalf("баллы = %f, ожидалось %f", points, tt.wantPoints)
 			}
 		})
+	}
+}
+
+func TestBuildTaskSnapshotOptionsWithoutCorrectness(t *testing.T) {
+	kim := content.KimNumber{ID: uuid.New(), MaxPrimaryScore: 1}
+	task := content.Task{
+		ID: uuid.New(), KimNumberID: kim.ID, StatementMD: "Выберите",
+		AnswerSpec: json.RawMessage(`{"kind":"choice","option_ids":["a"]}`),
+	}
+	options := []content.TaskOption{
+		{ID: uuid.New(), Position: 1, ContentMD: "Верный", IsCorrect: true},
+		{ID: uuid.New(), Position: 2, ContentMD: "Неверный"},
+	}
+
+	snapshot := buildTaskSnapshot(task, kim, nil, options)
+	if len(snapshot.Options) != 2 || snapshot.Options[0].ContentMD != "Верный" {
+		t.Fatalf("варианты снимка = %+v", snapshot.Options)
+	}
+
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("сериализовать снимок: %v", err)
+	}
+	if strings.Contains(string(raw), "is_correct") {
+		t.Fatal("снимок не должен раскрывать правильность вариантов")
+	}
+}
+
+func TestOldSnapshotWithoutOptionsReads(t *testing.T) {
+	raw := json.RawMessage(`{"task_id":"01930000-0000-7000-8000-000000000001","statement_md":"Условие","answer_spec":{"kind":"number","accepted":["1"]}}`)
+	var snapshot TaskSnapshot
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		t.Fatalf("старый снимок без options должен читаться: %v", err)
+	}
+	if len(snapshot.Options) != 0 {
+		t.Fatalf("options = %+v", snapshot.Options)
+	}
+}
+
+func TestSessionResponseHidesCorrectness(t *testing.T) {
+	optionID := uuid.New()
+	view := SessionView{
+		Session: Session{ID: uuid.New(), Kind: SessionKindPractice, Status: SessionInProgress},
+		Items: []SessionItemView{{
+			Item: SessionItem{ID: uuid.New(), Position: 1, Status: SessionItemPending},
+			Snapshot: TaskSnapshot{
+				StatementMD: "Выберите",
+				AnswerSpec:  json.RawMessage(`{"kind":"choice","option_ids":["` + optionID.String() + `"]}`),
+				Options:     []OptionSnapshot{{ID: optionID, Position: 1, ContentMD: "Верный"}},
+			},
+		}},
+	}
+
+	response := sessionResponse(view)
+	if len(response.Items[0].Options) != 1 || response.Items[0].Options[0].ID != optionID {
+		t.Fatalf("варианты JSON = %+v", response.Items[0].Options)
+	}
+	raw, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("сериализовать ответ: %v", err)
+	}
+	if strings.Contains(string(raw), "is_correct") {
+		t.Fatal("JSON сессии не должен раскрывать правильность вариантов")
 	}
 }

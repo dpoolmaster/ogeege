@@ -173,6 +173,20 @@ WHERE task_id = $1
 ORDER BY created_at
 `
 
+const listTaskOptionsQuery = `
+SELECT id, task_id, position, content_md, is_correct
+FROM content.task_options
+WHERE task_id = $1
+ORDER BY position
+`
+
+const deleteTaskOptionsQuery = `DELETE FROM content.task_options WHERE task_id = $1`
+
+const createTaskOptionQuery = `
+INSERT INTO content.task_options (id, task_id, position, content_md, is_correct)
+VALUES ($1, $2, $3, $4, $5)
+`
+
 // CreateTask сохраняет активную версию задания.
 func (r *PgRepository) CreateTask(ctx context.Context, q db.Querier, task *Task) error {
 	if _, err := q.Exec(ctx, createTaskQuery,
@@ -341,6 +355,45 @@ func (r *PgRepository) ListTaskAttachments(ctx context.Context, q db.Querier, ta
 	}
 
 	return attachments, nil
+}
+
+// ListTaskOptions возвращает варианты ответа задания.
+func (r *PgRepository) ListTaskOptions(ctx context.Context, q db.Querier, taskID uuid.UUID) ([]TaskOption, error) {
+	rows, err := q.Query(ctx, listTaskOptionsQuery, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("выбрать варианты задания: %w", err)
+	}
+	defer rows.Close()
+
+	var options []TaskOption
+	for rows.Next() {
+		var option TaskOption
+		if err := rows.Scan(&option.ID, &option.TaskID, &option.Position, &option.ContentMD, &option.IsCorrect); err != nil {
+			return nil, fmt.Errorf("прочитать вариант задания: %w", err)
+		}
+		options = append(options, option)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("прочитать варианты задания: %w", err)
+	}
+
+	return options, nil
+}
+
+// ReplaceTaskOptions заменяет набор вариантов ответа задания.
+func (r *PgRepository) ReplaceTaskOptions(ctx context.Context, q db.Querier, taskID uuid.UUID, options []TaskOption) error {
+	if _, err := q.Exec(ctx, deleteTaskOptionsQuery, taskID); err != nil {
+		return fmt.Errorf("удалить варианты задания: %w", err)
+	}
+	for _, option := range options {
+		if _, err := q.Exec(ctx, createTaskOptionQuery,
+			option.ID, taskID, option.Position, option.ContentMD, option.IsCorrect,
+		); err != nil {
+			return wrapWriteError("сохранить вариант задания", err)
+		}
+	}
+
+	return nil
 }
 
 func collectTasks(rows pgx.Rows) ([]Task, error) {

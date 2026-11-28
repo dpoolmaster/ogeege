@@ -384,3 +384,75 @@ func createTask(t *testing.T, ctx context.Context, service *Service, yearID, kim
 	}
 	return task
 }
+
+func TestTaskOptionsIntegration(t *testing.T) {
+	databaseURL, ok := os.LookupEnv("TEST_DATABASE_URL")
+	if !ok || databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL не задан")
+	}
+
+	ctx := context.Background()
+	pool, err := db.Open(ctx, databaseURL, 0, 2)
+	if err != nil {
+		t.Fatalf("открыть пул: %v", err)
+	}
+	defer pool.Close()
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("начать транзакцию: %v", err)
+	}
+	defer func() {
+		_ = tx.Rollback(context.Background())
+	}()
+
+	service := NewService(NewPgRepository(), tx, txOnly{tx: tx}, clock.New(), rand.New(rand.NewSource(1)), discardLogger())
+	exam := createExam(t, ctx, service, "it_options_"+uuid.Must(uuid.NewV7()).String())
+	year := createYear(t, ctx, service, exam.ID)
+	kim := createKim(t, ctx, service, year.ID, 1, 1, AnswerTypeShort, 1)
+	topic := createTopic(t, ctx, service, exam.ID, nil, "options", "Варианты")
+	if _, err := service.SetKimTopics(ctx, kim.ID, []KimTopicInput{{TopicID: topic.ID, Weight: 1}}); err != nil {
+		t.Fatalf("связать тему: %v", err)
+	}
+
+	first := uuid.Must(uuid.NewV7())
+	second := uuid.Must(uuid.NewV7())
+	third := uuid.Must(uuid.NewV7())
+	task, err := service.CreateTask(ctx, TaskInput{
+		ExamYearID: year.ID, KimNumberID: kim.ID, TopicID: &topic.ID,
+		Difficulty: DifficultyEasy, StatementMD: "Выберите верный ответ",
+		AnswerSpec: json.RawMessage(`{"kind":"choice","option_ids":["` + first.String() + `"]}`),
+		Source:     "seed",
+		Options: []TaskOptionInput{
+			{ID: first, Position: 1, ContentMD: "Верный", IsCorrect: true},
+			{ID: second, Position: 2, ContentMD: "Неверный"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("создать задание: %v", err)
+	}
+	if len(task.Options) != 2 {
+		t.Fatalf("вариантов = %d, ожидалось 2", len(task.Options))
+	}
+
+	task, err = service.UpdateTask(ctx, task.ID, TaskInput{
+		ExamYearID: year.ID, KimNumberID: kim.ID, TopicID: &topic.ID,
+		Difficulty: DifficultyEasy, StatementMD: "Выберите верный ответ",
+		AnswerSpec: json.RawMessage(`{"kind":"choice","option_ids":["` + third.String() + `"]}`),
+		Source:     "seed",
+		Options: []TaskOptionInput{
+			{ID: third, Position: 1, ContentMD: "Новый верный", IsCorrect: true},
+			{ID: second, Position: 2, ContentMD: "Неверный"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("обновить задание: %v", err)
+	}
+	options, err := service.repo.ListTaskOptions(ctx, tx, task.ID)
+	if err != nil {
+		t.Fatalf("прочитать варианты: %v", err)
+	}
+	if len(options) != 2 || options[0].ID != third {
+		t.Fatalf("варианты после замены = %+v", options)
+	}
+}

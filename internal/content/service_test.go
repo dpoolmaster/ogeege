@@ -111,8 +111,8 @@ func TestValidateAnswerSpec(t *testing.T) {
 		spec    string
 		wantErr bool
 	}{
-		{name: "число", spec: `{"kind":"number"}`},
-		{name: "интервал", spec: `{"kind":"interval"}`},
+		{name: "число", spec: `{"kind":"number","accepted":["2"]}`},
+		{name: "интервал", spec: `{"kind":"interval","accepted":["[-2;3]"]}`},
 		{name: "развёрнутый", spec: `{"kind":"extended"}`},
 		{name: "пусто", spec: ``, wantErr: true},
 		{name: "не JSON", spec: `{`, wantErr: true},
@@ -411,4 +411,53 @@ func TestValidateRubricSum(t *testing.T) {
 			t.Fatalf("ошибка = %v", err)
 		}
 	})
+}
+
+func TestValidateTaskOptions(t *testing.T) {
+	first := uuid.Must(uuid.NewV7())
+	second := uuid.Must(uuid.NewV7())
+	third := uuid.Must(uuid.NewV7())
+	spec := json.RawMessage(`{"kind":"choice","option_ids":["` + first.String() + `","` + second.String() + `"]}`)
+
+	valid := []TaskOptionInput{
+		{ID: first, Position: 1, ContentMD: "Первый", IsCorrect: true},
+		{ID: second, Position: 2, ContentMD: "Второй", IsCorrect: true},
+		{ID: third, Position: 3, ContentMD: "Третий"},
+	}
+
+	tests := []struct {
+		name   string
+		spec   json.RawMessage
+		inputs []TaskOptionInput
+		want   bool
+	}{
+		{name: "корректно", spec: spec, inputs: valid},
+		{name: "один вариант", spec: spec, inputs: valid[:1], want: true},
+		{name: "нет правильного", spec: spec, inputs: []TaskOptionInput{{ID: first, Position: 1, ContentMD: "А"}, {ID: second, Position: 2, ContentMD: "Б"}}, want: true},
+		{name: "дубликат позиции", spec: spec, inputs: []TaskOptionInput{{ID: first, Position: 1, ContentMD: "А", IsCorrect: true}, {ID: second, Position: 1, ContentMD: "Б", IsCorrect: true}}, want: true},
+		{name: "пустое содержимое", spec: spec, inputs: []TaskOptionInput{{ID: first, Position: 1, ContentMD: " ", IsCorrect: true}, {ID: second, Position: 2, ContentMD: "Б", IsCorrect: true}}, want: true},
+		{name: "лишний option_id", spec: json.RawMessage(`{"kind":"choice","option_ids":["` + third.String() + `"]}`), inputs: valid, want: true},
+		{name: "не отмечен правильным", spec: spec, inputs: []TaskOptionInput{{ID: first, Position: 1, ContentMD: "А", IsCorrect: true}, {ID: second, Position: 2, ContentMD: "Б"}}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateTaskOptions(tt.spec, tt.inputs)
+			if tt.want && err == nil {
+				t.Fatal("ожидалась ошибка")
+			}
+			if !tt.want && err != nil {
+				t.Fatalf("неожиданная ошибка: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateTaskOptionsRejectsOtherKinds(t *testing.T) {
+	err := validateTaskOptions(json.RawMessage(`{"kind":"number","accepted":["1"]}`), []TaskOptionInput{
+		{ID: uuid.Must(uuid.NewV7()), Position: 1, ContentMD: "А"},
+	})
+	if err == nil {
+		t.Fatal("варианты для number должны отклоняться")
+	}
 }

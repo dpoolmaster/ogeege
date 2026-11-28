@@ -2,6 +2,7 @@ package grading
 
 import (
 	"math"
+	"sort"
 	"strings"
 )
 
@@ -14,6 +15,20 @@ type intervalValue struct {
 }
 
 func checkInterval(parsed spec, answer string) Result {
+	if actual, ok := parseSet(answer); ok {
+		for _, item := range parsed.Accepted {
+			expected, ok := parseSet(item)
+			if !ok {
+				continue
+			}
+			if setsEqual(actual, expected) {
+				return matched(parsed.Accepted, formatSet(actual))
+			}
+		}
+
+		return mismatch(parsed.Accepted, formatSet(actual))
+	}
+
 	actual, ok := parseInterval(answer)
 	if !ok {
 		normalized := normalizeIntervalString(answer)
@@ -101,6 +116,56 @@ func intervalsEqual(actual, expected intervalValue) bool {
 	}
 
 	return true
+}
+
+func parseSet(value string) ([]float64, bool) {
+	value = strings.ReplaceAll(normalizeBase(value), " ", "")
+	if !strings.HasPrefix(value, "{") || !strings.HasSuffix(value, "}") {
+		return nil, false
+	}
+	value = strings.TrimSuffix(strings.TrimPrefix(value, "{"), "}")
+	if value == "" {
+		return nil, false
+	}
+
+	separator := ";"
+	if !strings.Contains(value, ";") {
+		separator = ","
+	}
+	parts := strings.Split(value, separator)
+	items := make([]float64, 0, len(parts))
+	for _, part := range parts {
+		number, ok := parseNumber(part, nil)
+		if !ok {
+			return nil, false
+		}
+		items = append(items, number)
+	}
+	sort.Float64s(items)
+
+	return items, true
+}
+
+func setsEqual(actual, expected []float64) bool {
+	if len(actual) != len(expected) {
+		return false
+	}
+	for index := range actual {
+		if math.Abs(actual[index]-expected[index]) > numberEpsilon {
+			return false
+		}
+	}
+
+	return true
+}
+
+func formatSet(items []float64) string {
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		parts = append(parts, formatNumber(item))
+	}
+
+	return "{" + strings.Join(parts, ";") + "}"
 }
 
 func normalizeIntervalString(value string) string {
